@@ -1,0 +1,198 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}{{ target_user.username }}的个人主页 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  {% if target_user %}
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center gap-4">
+        <a href="javascript:void(0)" class="text-decoration-none me-1" id="btn-back" title="返回">
+          <i class="ri ri-arrow-left-line ri-xl"></i>
+        </a>
+        <img src="{{ target_user|avatar_url }}" alt="头像" class="rounded-circle object-fit-cover" style="width:80px;height:80px;">
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-3 mb-1">
+            <h4 class="mb-0">{{ target_user.username }}</h4>
+            {% if user.is_authenticated and user != target_user %}
+            <button id="btn-follow" class="btn btn-sm {% if is_following %}btn-danger{% else %}btn-primary{% endif %}">
+              {% if is_following %}取消关注{% else %}关注{% endif %}
+            </button>
+            {% endif %}
+          </div>
+          <div class="d-flex flex-wrap gap-3 text-muted">
+            {% if profile.school %}
+            <span><i class="ri ri-school-line me-1"></i>{{ profile.school }}</span>
+            {% endif %}
+            {% if age %}
+            <span><i class="ri ri-cake-line me-1"></i>{{ age }}岁</span>
+            {% endif %}
+          </div>
+          <div class="d-flex gap-4 mt-2">
+            <span><strong>{{ following_count }}</strong> 关注</span>
+            <span><strong>{{ follower_count }}</strong> 粉丝</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <ul class="nav nav-tabs card-header-tabs" role="tablist">
+        <li class="nav-item">
+          <button class="nav-link active" id="tab-files" data-bs-toggle="tab" data-bs-target="#tab-content-files" type="button" role="tab">
+            <i class="ri ri-folder-shared-line me-1"></i>分享的文件（{{ total_shared_count }}）
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tab-posts" data-bs-toggle="tab" data-bs-target="#tab-content-posts" type="button" role="tab">
+            <i class="ri ri-file-list-line me-1"></i>帖子（{{ user_posts|length }}）
+          </button>
+        </li>
+      </ul>
+    </div>
+    <div class="card-body p-0">
+      <div class="tab-content">
+        <div class="tab-pane active" id="tab-content-files" role="tabpanel">
+          <div class="p-0">
+            {% if shared_folders %}
+            <h6 class="px-3 pt-3 pb-2 mb-0 border-bottom text-muted"><i class="ri ri-folder-3-fill text-warning me-1"></i>共享文件夹</h6>
+            <div class="list-group list-group-flush">
+              {% for folder in shared_folders %}
+              <div class="list-group-item p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h6 class="mb-1">
+                      <i class="ri ri-folder-3-fill text-warning me-1"></i>
+                      <a href="{% url 'browse_folder' folder.folder_path %}?owner_id={{ target_user.id|encrypt_id }}" class="text-decoration-none">{{ folder.folder_name }}</a>
+                    </h6>
+                    {% if folder.description %}
+                    <p class="text-muted small mb-1">{{ folder.description }}</p>
+                    {% endif %}
+                    <div class="text-muted small">
+                      <span><i class="ri ri-file-list-3-line me-1"></i>{{ folder.file_count }}个文件</span>
+                    </div>
+                  </div>
+                  <div class="flex-shrink-0">
+                    <a href="{% url 'browse_folder' folder.folder_path %}?owner_id={{ target_user.id|encrypt_id }}" class="btn btn-sm btn-outline-warning me-1">打开文件夹</a>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% if shared_uploads %}
+            <h6 class="px-3 pt-3 pb-2 mb-0 border-bottom text-muted"><i class="ri ri-file-text-line me-1"></i>共享文件</h6>
+            <div class="list-group list-group-flush">
+              {% for upload in shared_uploads %}
+              <div class="list-group-item p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h6 class="mb-1">
+                      <i class="ri ri-file-text-line me-1"></i>
+                      <a href="{% url 'open_question_bank' upload.id|encrypt_id %}" class="text-decoration-none">{{ upload.file_name }}</a>
+                    </h6>
+                    {% if upload.description %}
+                    <p class="text-muted small mb-1">{{ upload.description }}</p>
+                    {% endif %}
+                    <div class="text-muted small">
+                      <span class="me-3"><i class="ri ri-star-line me-1"></i>{{ upload.favorited_by.count }}</span>
+                      <span><i class="ri ri-file-list-3-line me-1"></i>{{ upload.total_questions }}题</span>
+                    </div>
+                  </div>
+                  <div class="flex-shrink-0">
+                    <a href="{% url 'comment_page' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-1">查看详情</a>
+                    <a href="{% url 'download_upload' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-secondary"><i class="ri ri-download-line"></i>下载 <small>{{ upload.download_count }}</small></a>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+              <i class="ri ri-inbox-line ri-2x text-muted d-block mb-3"></i>
+              <p class="text-muted">暂无共享的题库</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="tab-pane" id="tab-content-posts" role="tabpanel">
+          <div class="p-0">
+            {% if user_posts %}
+            <div class="list-group list-group-flush">
+              {% for post in user_posts %}
+              <div class="list-group-item p-3">
+                <div class="d-flex align-items-start gap-2">
+                  <img src="{{ post.user|avatar_url }}" alt="" class="rounded-circle flex-shrink-0 object-fit-cover" style="width:36px;height:36px;">
+                  <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <strong>{{ post.user.username }}</strong>
+                      <small class="text-muted">{{ post.created_at|date:"Y-m-d H:i" }}</small>
+                    </div>
+                    <p class="mb-1">{{ post.content|linebreaksbr }}</p>
+                    {% if post.image %}
+                    <img src="{{ post.image.url }}" alt="" class="img-fluid rounded mt-1" style="max-height:300px;object-fit:cover;">
+                    {% endif %}
+                    <div class="mt-2">
+                      <a href="{% url 'post_detail' post.id|encrypt_id %}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+              <i class="ri ri-file-list-line ri-2x text-muted d-block mb-3"></i>
+              <p class="text-muted">暂无帖子</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+$(document).ready(function() {
+  $('#btn-back').on('click', function(e) {
+    e.preventDefault();
+    history.back();
+  });
+
+  $('#btn-follow').on('click', function() {
+    var btn = $(this);
+    $.ajax({
+      url: '/toggle_follow/',
+      method: 'POST',
+      data: {
+        target_user_id: '{{ target_user.id|encrypt_id }}',
+        csrfmiddlewaretoken: '{{ csrf_token }}'
+      },
+      success: function(resp) {
+        if (resp.success) {
+          if (resp.is_following) {
+            btn.removeClass('btn-primary').addClass('btn-danger').text('取消关注');
+          } else {
+            btn.removeClass('btn-danger').addClass('btn-primary').text('关注');
+          }
+        }
+      }
+    });
+  });
+});
+</script>
+{% endblock %}

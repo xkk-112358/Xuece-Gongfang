@@ -1,0 +1,63 @@
+{% load static %}
+{% load app1_extras %}
+<div class="mb-4 border-bottom pb-4">
+  <div class="d-flex align-items-center mb-3">
+    <a href="{% url 'user_profile' item.user.id|encrypt_id %}" class="user-avatar-link" data-user-id="{{ item.user.id|encrypt_id }}">
+      <div class="d-block w-px-40 h-px-40 rounded overflow-hidden me-2 flex-shrink-0">
+        {% if item.profile and item.profile.avatar %}
+          <img src="{{ item.profile.avatar.url }}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% elif item.profile and item.profile.default_avatar %}
+          <img src="{% static item.profile.default_avatar %}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% else %}
+          <div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white">
+            <i class="ri ri-user-line"></i>
+          </div>
+        {% endif %}
+      </div>
+    </a>
+    <div>
+      <div class="fw-semibold">{{ item.user.username }}</div>
+      {% if item.profile and item.profile.school %}
+      <small class="text-muted">{{ item.profile.school }}</small>
+      {% endif %}
+    </div>
+  </div>
+  <div class="ms-2 mb-3 p-3 bg-white rounded shadow-sm border-start border-4 border-warning">
+    <div class="fw-medium d-flex align-items-center">
+      <i class="ri ri-folder-3-fill text-warning me-2" style="font-size:1.2rem;"></i>
+      {{ item.folder_name }}
+      <i class="ri ri-arrow-right-s-line ms-1"></i>
+    </div>
+    {% if item.description %}
+    <small class="text-muted d-block mt-1">{{ item.description }}</small>
+    {% endif %}
+    <small class="text-muted d-block mt-1">包含 {{ item.file_count }} 个文件</small>
+    <small class="text-muted d-block">{{ item.uploaded_at|date:'Y-m-d H:i' }}</small>
+    <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
+      <a href="{% url 'browse_folder' item.folder_path %}?owner_id={{ item.user.id|encrypt_id }}" class="btn btn-sm btn-outline-warning">打开文件夹</a>
+      <a href="{% url 'comment_page' item.first_upload_id|encrypt_id %}" class="btn btn-sm btn-outline-primary">详细</a>
+      <button class="btn btn-sm btn-outline-primary download-folder" data-folder="{{ item.folder_path }}">下载</button>
+      {% if user.is_authenticated %}
+      <button class="btn btn-sm btn-link text-decoration-none p-0 btn-like-upload" data-upload-id="{{ item.first_upload_id|encrypt_id }}">
+        <i class="ri {% if item.is_liked %}ri-heart-fill text-danger{% else %}ri-heart-line{% endif %}"></i>
+        <small class="like-count">{{ item.like_count }}</small>
+      </button>
+      <a href="{% url 'comment_page' item.first_upload_id|encrypt_id %}" class="btn btn-sm btn-link text-decoration-none p-0">
+        <i class="ri ri-chat-1-line"></i>
+        <small>{{ item.comment_count }}</small>
+      </a>
+      <button class="btn btn-sm btn-link text-decoration-none p-0 btn-favorite-folder" data-folder="{{ item.folder_path }}">
+        <i class="ri {% if item.is_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %}"></i>
+        <small class="favorite-count">{{ item.favorite_count|default:0 }}</small>
+      </button>
+      {% else %}
+      <small class="text-muted"><i class="ri ri-heart-line"></i> {{ item.like_count }}</small>
+      <a href="{% url 'comment_page' item.first_upload_id|encrypt_id %}" class="btn btn-sm btn-link text-decoration-none p-0">
+        <i class="ri ri-chat-1-line"></i>
+        <small>{{ item.comment_count }}</small>
+      </a>
+      <small class="text-muted"><i class="ri ri-star-line"></i> 0</small>
+      {% endif %}
+    </div>
+  </div>
+</div>

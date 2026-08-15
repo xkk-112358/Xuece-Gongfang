@@ -1,0 +1,80 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+{% block title %}预览题单 - {{ question_list.title }}{% endblock %}
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.remove-from-list').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            if (!confirm('确定从题单移除该题吗？')) return;
+            var qid = this.dataset.questionId;
+            var csrf = '{{ csrf_token }}';
+            fetch('/remove_from_question_list/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+                body: JSON.stringify({list_id: {{ question_list.id }}, question_id: qid})
+            }).then(function(r){return r.json()}).then(function(d){
+                if (d.success) { location.reload(); }
+                else { alert(d.message); }
+            });
+        });
+    });
+    // 确保 KaTeX 直接渲染所有已知的公式
+    function runKatex() {
+      if (window.renderMathNow) {
+        var els = document.querySelectorAll('.math-content');
+        for (var i = 0; i < els.length; i++) {
+          els[i].dataset.katexRendered = '';
+          window.renderMathNow(els[i]);
+        }
+      } else {
+        setTimeout(runKatex, 500);
+      }
+    }
+    setTimeout(runKatex, 1000);
+});
+</script>
+{% endblock %}
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-0">{{ question_list.title }}</h4>
+            <p class="text-muted">{{ question_list.description|default:'' }} （共 {{ questions|length }} 道题）</p>
+        </div>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary me-2">返回</a>
+            <a href="{% url 'start_self_test' question_list.id %}" class="btn btn-success">开始自测</a>
+        </div>
+    </div>
+    {% for q in questions %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <h6 class="card-subtitle mb-2 text-muted">第 {{ forloop.counter }} 题（{{ q.question_type }}）</h6>
+                    <a href="{% url 'question_ai_chat' q.id %}" class="btn btn-sm btn-outline-info"><i class="ri ri-ai-generate"></i> AI解析</a>
+                </div>
+                <button class="btn btn-sm btn-outline-danger remove-from-list" data-question-id="{{ q.id }}">移除</button>
+            </div>
+            <div class="math-content math-lazy mt-2" style="white-space:pre-wrap;line-height:1.8;">{{ q.content|render_content|safe }}</div>
+            {% if q.answer %}
+            <div class="mt-2 p-2 bg-light rounded">
+                <strong>答案：</strong><span class="math-content math-lazy" style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</span>
+            </div>
+            {% endif %}
+            {% if q.tags %}
+            <div class="mt-2">
+                {% for t in q.tags|split_tags %}
+                <span class="badge bg-secondary me-1">{{ t }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

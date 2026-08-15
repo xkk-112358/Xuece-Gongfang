@@ -1,0 +1,791 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}浏览文件夹{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+function initSubjectCombobox(combobox) {
+  const input = combobox.querySelector('.subject-input');
+  const dropdownMenu = combobox.querySelector('.subject-dropdown-menu');
+  const customInput = combobox.querySelector('.subject-custom-input');
+  const addNewItem = combobox.querySelector('.subject-add-new');
+  
+  function filterSubjects(query) {
+    const items = dropdownMenu.querySelectorAll('.subject-item');
+    items.forEach(function(item) {
+      item.style.display = item.textContent.toLowerCase().includes(query) ? '' : 'none';
+    });
+  }
+
+  function showDropdown() {
+    filterSubjects(input.value.toLowerCase());
+    dropdownMenu.classList.add('show');
+  }
+
+  function hideDropdown() {
+    dropdownMenu.classList.remove('show');
+  }
+
+  // 输入框获取焦点时显示下拉菜单
+  input.addEventListener('focus', showDropdown);
+  
+  // 输入框输入时过滤
+  input.addEventListener('input', function() {
+    showDropdown();
+  });
+  
+  // 选择已有学科
+  dropdownMenu.addEventListener('click', function(e) {
+    const item = e.target.closest('.subject-item');
+    if (item) {
+      e.preventDefault();
+      input.value = item.dataset.value;
+      hideDropdown();
+    }
+  });
+  
+  // 点击"没有学科"进入自定义输入模式
+  addNewItem.addEventListener('click', function(e) {
+    e.preventDefault();
+    hideDropdown();
+    input.style.display = 'none';
+    customInput.style.display = '';
+    customInput.focus();
+  });
+  
+  // 自定义输入框回车确认
+  customInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const value = customInput.value.trim();
+      if (value) {
+        input.value = value;
+        customInput.style.display = 'none';
+        input.style.display = '';
+        hideDropdown();
+      }
+    }
+  });
+  
+  // 自定义输入框失焦时如果没值则恢复
+  customInput.addEventListener('blur', function() {
+    setTimeout(function() {
+      if (!customInput.value.trim()) {
+        customInput.style.display = 'none';
+        input.style.display = '';
+      }
+    }, 200);
+  });
+
+  // 输入框失焦时关闭下拉（加延迟以允许点击选项）
+  input.addEventListener('blur', function() {
+    setTimeout(hideDropdown, 200);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化学科下拉框
+    initSubjectCombobox(document.querySelector('.subject-combobox'));
+    
+    // 上传文件到当前文件夹
+    var uploadForm = document.getElementById('formFolderUpload');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var fileInput = document.getElementById('folderUploadFile');
+            var files = fileInput.files;
+            var submitBtn = uploadForm.querySelector('button[type="submit"]');
+            
+            if (files.length === 0) {
+                alert('请选择文件');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '上传中...';
+            
+            var csrfToken = uploadForm.querySelector('[name=csrfmiddlewaretoken]').value;
+            var desc = document.getElementById('folderUploadDesc').value;
+            var subject = document.getElementById('folderUploadSubject').value;
+            var folderPath = '{{ current_path }}';  // 当前文件夹路径
+            var total = files.length;
+            var done = 0;
+            var failed = 0;
+            
+            for (var i = 0; i < files.length; i++) {
+                (function(file) {
+                    var fd = new FormData();
+                    fd.append('file', file);
+                    // 如果有文件夹路径则加上前缀
+                    var name = file.webkitRelativePath || file.name;
+                    if (folderPath) {
+                        name = folderPath + '/' + name;
+                    }
+                    fd.append('file_name', name);
+                    fd.append('description', desc);
+                    fd.append('subject', subject);
+                    
+                    fetch('/upload_file/', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken },
+                        body: fd
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        done++;
+                        if (!d.success) failed++;
+                        if (done === total) {
+                            if (failed === 0) {
+                                alert('全部上传成功！');
+                                location.reload();
+                            } else {
+                                alert('上传完成：成功 ' + (total - failed) + ' 个，失败 ' + failed + ' 个');
+                                location.reload();
+                            }
+                        }
+                    })
+                    .catch(function() {
+                        done++; failed++;
+                        if (done === total) {
+                            alert('上传完成：成功 ' + (total - failed) + ' 个，失败 ' + failed + ' 个');
+                            location.reload();
+                        }
+                    });
+                })(files[i]);
+            }
+        });
+    }
+    
+    // 返回上一页
+    document.getElementById('btnBack').addEventListener('click', function() {
+        window.history.back();
+    });
+
+    // 编辑文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.edit-folder');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var newName = prompt('请输入新的文件夹名称:', folderName.split('/').pop());
+            if (newName && newName.trim() && newName !== folderName.split('/').pop()) {
+                var csrfToken = getCookie('csrftoken');
+                fetch('/rename_folder/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        old_name: folderName,
+                        new_name: folderName.replace(/[^/]+$/, newName.trim())
+                    })
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        alert('文件夹重命名成功');
+                        location.reload();
+                    } else {
+                        alert('重命名失败: ' + data.message);
+                    }
+                }).catch(function(error) {
+                    alert('重命名失败，请重试');
+                });
+            }
+        }
+    });
+
+    // 下载文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.download-folder');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/download_folder/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    folder_name: folderName
+                })
+            }).then(function(response) {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(function(data) {
+                        throw new Error(data.message || '下载失败');
+                    });
+                }
+            }).then(function(blob) {
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = folderName.split('/').pop() + '.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }).catch(function(error) {
+                alert('下载失败: ' + error.message);
+            });
+        }
+    });
+
+    // 删除文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.delete-folder-btn');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            if (confirm('确定要删除文件夹 "' + folderName.split('/').pop() + '" 及其所有内容吗？此操作不可撤销！')) {
+                var csrfToken = getCookie('csrftoken');
+                fetch('/delete_folder/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        folder_name: folderName
+                    })
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        alert('文件夹删除成功');
+                        window.history.back();
+                    } else {
+                        alert('删除失败: ' + data.message);
+                    }
+                }).catch(function(error) {
+                    alert('删除失败，请重试');
+                });
+            }
+        }
+    });
+
+    // 切换文件夹共享状态
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.toggle-folder-share');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/toggle_folder_share/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    folder_name: folderName
+                })
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    if (data.is_shared) {
+                        target.textContent = '是';
+                        target.classList.remove('btn-secondary');
+                        target.classList.add('btn-success');
+                    } else {
+                        target.textContent = '否';
+                        target.classList.remove('btn-success');
+                        target.classList.add('btn-secondary');
+                    }
+                } else {
+                    alert('操作失败: ' + data.message);
+                }
+            }).catch(function(error) {
+                alert('操作失败，请重试');
+            });
+        }
+    });
+
+    // 切换文件收藏
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.file-favorite-star');
+        if (target) {
+            e.preventDefault();
+            var uploadId = target.getAttribute('data-upload-id');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/toggle_upload_favorite/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    upload_id: uploadId
+                })
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    if (data.is_favorited) {
+                        target.classList.remove('ri-star-line');
+                        target.classList.add('ri-star-fill', 'text-warning');
+                    } else {
+                        target.classList.remove('ri-star-fill', 'text-warning');
+                        target.classList.add('ri-star-line');
+                    }
+                }
+            }).catch(function(error) {
+                console.error('收藏失败:', error);
+            });
+        }
+    });
+
+    // 切换文件共享
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.toggle-share');
+        if (target) {
+            e.preventDefault();
+            var uploadId = target.getAttribute('data-upload-id');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/toggle_share/' + uploadId + '/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    if (data.is_shared) {
+                        target.textContent = '是';
+                        target.classList.remove('btn-secondary');
+                        target.classList.add('btn-success');
+                    } else {
+                        target.textContent = '否';
+                        target.classList.remove('btn-success');
+                        target.classList.add('btn-secondary');
+                    }
+                }
+            }).catch(function(error) {
+                console.error('共享失败:', error);
+            });
+        }
+    });
+
+    // 删除文件
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.delete-upload');
+        if (target) {
+            e.preventDefault();
+            var uploadId = target.getAttribute('data-upload-id');
+            if (confirm('确定要删除该文件吗？此操作不可撤销！')) {
+                var csrfToken = getCookie('csrftoken');
+                fetch('/delete_upload/' + uploadId + '/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    },
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        alert('文件删除成功');
+                        location.reload();
+                    } else {
+                        alert('删除失败: ' + data.message);
+                    }
+                }).catch(function(error) {
+                    alert('删除失败，请重试');
+                });
+            }
+        }
+    });
+});
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+// 页面加载后自动轮询处理中的文件进度
+document.addEventListener('DOMContentLoaded', function() {
+    var processingBtns = document.querySelectorAll('button.btn-outline-info.disabled');
+    processingBtns.forEach(function(btn) {
+        if (btn.textContent.includes('处理中...')) {
+            var uploadId = btn.dataset.uploadId;
+            if (uploadId) {
+                startProgressPolling(btn, uploadId);
+            }
+        }
+    });
+});
+
+// 开始进度轮询
+function startProgressPolling(btn, uploadId) {
+    var pollInterval = setInterval(function() {
+        fetch('/get_upload_progress/?upload_id=' + encodeURIComponent(uploadId))
+            .then(function(r) { return r.json(); })
+            .then(function(progressData) {
+                if (progressData.success) {
+                    var processed = progressData.processed;
+                    var total = progressData.total;
+                    
+                    if (progressData.status === 'completed') {
+                        clearInterval(pollInterval);
+                        btn.textContent = '已完成';
+                        btn.classList.remove('btn-outline-info');
+                        btn.classList.add('btn-outline-success');
+                        setTimeout(function() { location.reload(); }, 500);
+                    } else if (progressData.status === 'error' || progressData.error) {
+                        clearInterval(pollInterval);
+                        btn.disabled = false;
+                        btn.textContent = '重新提取';
+                        btn.classList.remove('btn-outline-info');
+                        btn.classList.add('btn-outline-warning');
+                    } else if (progressData.status === 'ai_processing') {
+                        if (total > 0 && processed > 0) {
+                            btn.textContent = '处理中... (' + processed + '/' + total + ')';
+                        } else {
+                            btn.textContent = '处理中... (AI分析中...)';
+                        }
+                    } else {
+                        btn.textContent = '处理中... (提取文本中...)';
+                    }
+                }
+            })
+            .catch(function(err) {
+                // 忽略轮询错误
+            });
+    }, 1000);
+}
+
+// 提取题目功能（带进度显示）
+document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (target.classList.contains('extract-questions')) {
+        e.preventDefault();
+        var fileName = target.dataset.fileName || '该文件';
+        if (!confirm('确认提取「' + fileName + '」的题目吗？')) {
+            return;
+        }
+        var uploadId = target.dataset.uploadId;
+        var btn = target;
+        
+        btn.disabled = true;
+        btn.textContent = '处理中... (0%)';
+        btn.classList.remove('btn-outline-success', 'btn-outline-warning');
+        btn.classList.add('btn-outline-info');
+        
+        var formData = new FormData();
+        formData.append('upload_id', uploadId);
+        formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+        
+        fetch('/extract_questions/', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // 开始轮询进度
+                var pollInterval = setInterval(function() {
+                    fetch('/get_upload_progress/?upload_id=' + encodeURIComponent(uploadId))
+                      .then(function(r) { return r.json(); })
+                      .then(function(progressData) {
+                          if (progressData.success) {
+                              var progress = progressData.progress;
+                              btn.textContent = '处理中... (' + progress + '%)';
+                              
+                              if (progressData.status === 'completed') {
+                                  clearInterval(pollInterval);
+                                  btn.textContent = '已完成';
+                                  btn.classList.remove('btn-outline-info');
+                                  btn.classList.add('btn-outline-success');
+                                  setTimeout(function() { location.reload(); }, 500);
+                              } else if (progressData.status === 'error' || progressData.error) {
+                                  clearInterval(pollInterval);
+                                  alert('处理失败: ' + (progressData.error || '未知错误'));
+                                  btn.disabled = false;
+                                  btn.textContent = '重新提取';
+                                  btn.classList.remove('btn-outline-info');
+                                  btn.classList.add('btn-outline-warning');
+                              }
+                          }
+                      })
+                      .catch(function(err) {
+                          // 忽略轮询错误
+                      });
+                }, 1000);
+            } else {
+                alert('操作失败: ' + data.message);
+                btn.disabled = false;
+                btn.textContent = '重新提取';
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-outline-warning');
+            }
+        })
+        .catch(function(err) {
+            alert('请求失败: ' + err.message);
+            btn.disabled = false;
+            btn.textContent = '重新提取';
+            btn.classList.remove('btn-outline-info');
+            btn.classList.add('btn-outline-warning');
+        });
+    }
+});
+// 加入题单功能
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.add-to-list-btn, .add-file-to-list-btn');
+  if (!btn) return;
+  var id = parseInt(btn.dataset.questionId || btn.dataset.uploadId);
+  if (!id) return;
+  fetch('/get_question_lists/')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) { alert('获取题单失败'); return; }
+    var lists = data.lists;
+    var html = '<div class="mb-3"><label class="form-label">选择题单</label><select class="form-select" id="folderAddToListSelect">';
+    if (lists.length === 0) {
+      html += '<option value="">暂无题单，请先创建</option>';
+    } else {
+      lists.forEach(function(l) {
+        html += '<option value="' + l.id + '">' + l.title + '（' + l.count + '题）</option>';
+      });
+    }
+    html += '</select></div>';
+    html += '<div class="mb-3"><label class="form-label">或新建题单</label><input type="text" class="form-control" id="folderAddToListNewName" placeholder="输入题单名称"></div>';
+    var modalDiv = document.createElement('div');
+    modalDiv.className = 'modal fade';
+    modalDiv.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">加入题单</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">' + html + '</div><div class="modal-footer"><button type="button" class="btn btn-primary" id="folderAddToListConfirm">确定</button></div></div></div>';
+    document.body.appendChild(modalDiv);
+    var modal = new bootstrap.Modal(modalDiv);
+    modal.show();
+    modalDiv.addEventListener('hidden.bs.modal', function() { modalDiv.remove(); });
+    document.getElementById('folderAddToListConfirm').addEventListener('click', function() {
+      var selectedId = document.getElementById('folderAddToListSelect').value;
+      var newName = document.getElementById('folderAddToListNewName').value.trim();
+      var csrf = getCookie('csrftoken');
+      function doAdd(listId) {
+        fetch('/batch_add_uploads_to_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({upload_ids: [id], list_id: listId})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { alert('已加入题单！'); modal.hide(); }
+          else { alert(d.message); }
+        });
+      }
+      if (newName) {
+        fetch('/create_question_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({title: newName, description: ''})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { doAdd(d.question_list.id); }
+          else { alert(d.message); }
+        });
+      } else if (selectedId) {
+        doAdd(parseInt(selectedId));
+      } else {
+        alert('请选择或创建题单');
+      }
+    });
+  });
+});
+</script>
+{% endblock page_js %}
+
+{% block content %}
+<style>
+  .subject-combobox { position: relative; width: 100%; }
+  .subject-combobox .subject-input { width: 100%; border-radius: 0.375rem; }
+  .subject-combobox .subject-dropdown-menu { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1000; min-width: 100%; margin-top: 0; border-radius: 0 0 0.375rem 0.375rem; display: none; max-height: 250px; overflow-y: auto; border: 1px solid #dee2e6; border-top: none; background: #fff; list-style: none; padding: 0.5rem 0; }
+  .subject-combobox .subject-dropdown-menu.show { display: block !important; }
+  .subject-combobox .subject-dropdown-menu li { padding: 0; }
+  .subject-combobox .subject-dropdown-menu .dropdown-item { padding: 0.5rem 1rem; cursor: pointer; color: #333; text-decoration: none; display: block; }
+  .subject-combobox .subject-dropdown-menu .dropdown-item:hover { background-color: #f0f0f0; }
+  .subject-combobox .subject-custom-input { width: 100%; border-radius: 0.375rem; }
+</style>
+<div class="row align-items-start">
+    <div class="col-lg-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <!-- 返回按钮 -->
+                        <button type="button" id="btnBack" class="btn btn-sm btn-outline-secondary me-3" title="返回上一页">
+                            <i class="ri ri-arrow-left-line"></i>
+                        </button>
+                        
+                        <!-- 面包屑导航 -->
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb mb-0">
+                                <li class="breadcrumb-item">
+                                    <a href="{% url 'browse_folder' %}{% if owner_id_encrypted %}?owner_id={{ owner_id_encrypted }}{% endif %}">我的文件</a>
+                                </li>
+                                {% for breadcrumb in breadcrumbs %}
+                                <li class="breadcrumb-item">
+                                    <a href="{% url 'browse_folder' breadcrumb.path %}{% if owner_id_encrypted %}?owner_id={{ owner_id_encrypted }}{% endif %}">{{ breadcrumb.name }}</a>
+                                </li>
+                                {% endfor %}
+                            </ol>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            {% if is_owner %}
+            <!-- 上传文件表单 -->
+            <div class="card-body border-bottom bg-light">
+                <form id="formFolderUpload" method="post" enctype="multipart/form-data" class="row g-2 align-items-end">
+                    {% csrf_token %}
+                    <div class="col-md-4">
+                        <label class="form-label small">选择文件</label>
+                        <input class="form-control form-control-sm" type="file" id="folderUploadFile" name="file" accept=".doc,.docx,.pdf,.md" multiple />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">描述（可选）</label>
+                        <input class="form-control form-control-sm" type="text" id="folderUploadDesc" name="description" placeholder="文件描述" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">学科</label>
+                        <div class="subject-combobox">
+                            <input type="text" class="form-control form-control-sm subject-input" id="folderUploadSubject" name="subject" placeholder="选择或输入学科" autocomplete="off">
+                            <ul class="subject-dropdown-menu">
+                                <li><a class="dropdown-item subject-add-new" href="#">没有学科？点我添加</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% for subj in all_subjects %}
+                                <li><a class="dropdown-item subject-item" href="#" data-value="{{ subj }}">{{ subj }}</a></li>
+                                {% endfor %}
+                            </ul>
+                            <input type="text" class="form-control form-control-sm mt-1 subject-custom-input" style="display:none;" placeholder="输入新学科名称">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">上传到当前文件夹</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-centered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 50px;">收藏</th>
+                                <th>名称</th>
+                                <th>描述</th>
+                                <th>学科</th>
+                                <th>大小</th>
+                                <th>共享</th>
+                                <th style="width: 200px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 混合显示文件夹和文件 -->
+                            {% for item in all_items %}
+                            {% if item.type == 'folder' %}
+                            {% with folder=item.data %}
+                            <tr>
+                                <td><span class="ri ri-folder-3-fill text-warning" style="font-size:1.2rem;"></span></td>
+                                <td>
+                                    <a href="{% url 'browse_folder' folder.folder %}{% if owner_id_encrypted %}?owner_id={{ owner_id_encrypted }}{% endif %}" class="text-dark">
+                                        <i class="ri ri-folder-3-fill text-warning me-2" style="font-size:1.1rem;"></i>
+                                        <strong>{{ folder.display_name }}</strong>
+                                        <i class="ri ri-arrow-right-s-line ms-1"></i>
+                                    </a>
+                                </td>
+                                <td>{{ folder.file_count }} 个文件</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>
+                                    {% if is_owner %}
+                                    <button type="button" class="btn btn-sm {% if folder.is_shared %}btn-success{% else %}btn-secondary{% endif %} toggle-folder-share" data-folder="{{ folder.folder }}">
+                                        {{ folder.is_shared|yesno:"是,否" }}
+                                    </button>
+                                    {% else %}
+                                    <span class="badge {% if folder.is_shared %}bg-success{% else %}bg-secondary{% endif %}">{{ folder.is_shared|yesno:"已共享,未共享" }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="action-buttons">
+                                    <a href="{% url 'browse_folder' folder.folder %}{% if owner_id_encrypted %}?owner_id={{ owner_id_encrypted }}{% endif %}" class="btn btn-sm btn-outline-primary me-2">打开</a>
+                                    {% if is_owner %}
+                                    <button type="button" class="btn btn-sm btn-outline-info me-2 edit-folder" data-folder="{{ folder.folder }}">编辑</button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2 download-folder" data-folder="{{ folder.folder }}">下载</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-folder-btn" data-folder="{{ folder.folder }}">删除</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% else %}
+                            {% with upload=item.data.upload %}
+                            <tr data-upload-id="{{ upload.id|encrypt_id }}">
+                                <td>
+                                    <span class="ri {% if upload.id in favorite_upload_ids %}ri-star-fill text-warning{% else %}ri-star-line{% endif %} file-favorite-star" 
+                                          data-upload-id="{{ upload.id|encrypt_id }}" style="cursor:pointer;font-size:1.2rem;"></span>
+                                </td>
+                                <td>
+                                    <a href="{{ upload.file.url }}" target="_blank" class="text-primary">{{ upload.file_name|default:upload.file.name|cut:"uploads/" }}</a>
+                                </td>
+                                <td>{{ upload.description|default:"无描述" }}</td>
+                                <td>{{ upload.subject|default:"-" }}</td>
+                                <td>
+                                    {% if upload.file.size %}
+                                    {{ upload.file.size|filesizeformat }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_owner %}
+                                    <button type="button" class="btn btn-sm {% if upload.is_shared %}btn-success{% else %}btn-secondary{% endif %} toggle-share" data-upload-id="{{ upload.id|encrypt_id }}">
+                                        {{ upload.is_shared|yesno:"是,否" }}
+                                    </button>
+                                    {% else %}
+                                    <span class="badge {% if upload.is_shared %}bg-success{% else %}bg-secondary{% endif %}">{{ upload.is_shared|yesno:"已共享,未共享" }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="action-buttons">
+                                    <a href="{% url 'comment_page' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-info me-2">详细</a>
+                                    <a href="{% url 'open_question_bank' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-2">打开题库</a>
+                                    {% if upload.processing_status == 'completed' %}
+                                    <button type="button" class="btn btn-sm btn-outline-success me-2 add-file-to-list-btn" data-upload-id="{{ upload.id }}">加入题单</button>
+                                    {% endif %}
+                                    <a href="{% url 'download_upload' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-2">下载</a>
+                                    {% if is_owner %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-upload" data-upload-id="{{ upload.id|encrypt_id }}">删除</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <i class="ri ri-folder-open-line" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">该文件夹为空</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

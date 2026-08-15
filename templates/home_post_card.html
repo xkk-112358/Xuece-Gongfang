@@ -1,0 +1,70 @@
+{% load static %}
+{% load app1_extras %}
+<div class="mb-4 border-bottom pb-4">
+  <div class="d-flex align-items-center mb-3">
+    <a href="{% url 'user_profile' item.user.id|encrypt_id %}" class="user-avatar-link" data-user-id="{{ item.user.id|encrypt_id }}">
+      <div class="d-block w-px-40 h-px-40 rounded overflow-hidden me-2 flex-shrink-0">
+        {% if item.profile and item.profile.avatar %}
+          <img src="{{ item.profile.avatar.url }}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% elif item.profile and item.profile.default_avatar %}
+          <img src="{% static item.profile.default_avatar %}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% else %}
+          <div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white">
+            <i class="ri ri-user-line"></i>
+          </div>
+        {% endif %}
+      </div>
+    </a>
+    <div>
+      <div class="fw-semibold">{{ item.user.username }}</div>
+      {% if item.profile and item.profile.school %}
+      <small class="text-muted">{{ item.profile.school }}</small>
+      {% endif %}
+    </div>
+  </div>
+  <div class="ms-2 mb-3 p-3 bg-white rounded shadow-sm border-start border-4 border-info">
+    {% if item.content %}
+    <div class="mb-2" style="white-space:pre-wrap;">{{ item.content }}</div>
+    {% endif %}
+    {% if item.image %}
+    <div class="mb-2">
+      <img src="{{ item.image }}" alt="帖子图片" class="img-fluid rounded" style="max-height:300px;">
+    </div>
+    {% endif %}
+    {% if item.link_url %}
+    <div class="mb-2">
+      <span style="white-space:pre-wrap;">🔗 <a href="{{ item.link_url }}" target="_blank" class="text-primary">{{ item.link_url }}</a></span>
+    </div>
+    {% endif %}
+    <small class="text-muted d-block mt-1">{{ item.created_at|date:'Y-m-d H:i' }}</small>
+    <div class="d-flex align-items-center gap-3 mt-2">
+      {% if user.is_authenticated %}
+      <button class="btn btn-sm btn-link text-decoration-none p-0 btn-like-post" data-post-id="{{ item.id|encrypt_id }}">
+        <i class="ri {% if item.is_liked %}ri-heart-fill text-danger{% else %}ri-heart-line{% endif %}"></i>
+        <small class="like-count">{{ item.like_count }}</small>
+      </button>
+      <a href="{% url 'post_detail' item.id|encrypt_id %}" class="btn btn-sm btn-link text-decoration-none p-0">
+        <i class="ri ri-chat-1-line"></i>
+        <small>{{ item.comment_count }}</small>
+      </a>
+      <button class="btn btn-sm btn-link text-decoration-none p-0 btn-favorite-post" data-post-id="{{ item.id|encrypt_id }}">
+        <i class="ri {% if item.is_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %}"></i>
+        <small class="favorite-count">{{ item.favorite_count|default:0 }}</small>
+      </button>
+      <span class="text-primary small" style="cursor:pointer;" onclick="copyLink('{% url 'post_detail' item.id|encrypt_id %}')">
+        <i class="ri ri-share-line"></i>
+      </span>
+      {% if user == item.user %}
+      <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-post" data-post-id="{{ item.id|encrypt_id }}">
+        <i class="ri ri-delete-bin-line"></i>
+      </button>
+      {% endif %}
+      <a href="{% url 'post_detail' item.id|encrypt_id %}" class="btn btn-sm btn-outline-secondary">详细</a>
+      {% else %}
+      <small class="text-muted"><i class="ri ri-heart-line"></i> {{ item.like_count }}</small>
+      <small class="text-muted"><i class="ri ri-chat-1-line"></i> {{ item.comment_count }}</small>
+      <a href="{% url 'post_detail' item.id|encrypt_id %}" class="btn btn-sm btn-outline-secondary">详细</a>
+      {% endif %}
+    </div>
+  </div>
+</div>

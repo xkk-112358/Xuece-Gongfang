@@ -1,0 +1,479 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}{% if post %}{{ post.user.username }}的帖子{% else %}帖子不存在{% endif %} - 学测工坊{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+  $(function() {
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+    var postId = '{{ post.id|encrypt_id|default:0 }}';
+
+    if (!postId) return;
+
+    // 点赞
+    $(document).on('click', '#btn-like-post', function() {
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_post_like/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            $('#like-count').text(resp.count);
+            if (resp.liked) {
+              btn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+            } else {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 收藏
+    $(document).on('click', '#btn-favorite-post', function() {
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_post_favorite/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            $('#favorite-count').text(resp.favorite_count);
+            if (resp.is_favorited) {
+              btn.find('i').removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              btn.find('i').removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 加载评论
+    function loadComments() {
+      $.getJSON('/get_post_comments/' + postId + '/', function(resp) {
+        if (resp.success) {
+          $('#comments-list').empty();
+          resp.comments.forEach(function(c) {
+            $('#comments-list').append(renderComment(c, false));
+          });
+          $('#comments-count').text(resp.comments.length);
+        }
+      });
+    }
+
+    function renderComment(c, isReply) {
+      var indent = isReply ? 'ms-5' : '';
+      var html = '<div class="mb-3 ' + indent + '" data-comment-id="' + c.id + '">';
+      html += '<div class="d-flex align-items-start gap-2">';
+      html += '<a href="/user_profile/' + c.encrypted_user_id + '/" class="user-avatar-link flex-shrink-0"><div class="d-block rounded overflow-hidden" style="width:36px;height:36px;">';
+      if (c.avatar_url) {
+        html += '<img src="' + c.avatar_url + '" alt="" class="w-100 h-100 object-fit-cover">';
+      } else {
+        html += '<div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white"><i class="ri ri-user-line"></i></div>';
+      }
+      html += '</div></a>';
+      html += '<div class="flex-grow-1">';
+      html += '<div class="d-flex align-items-center gap-2 flex-wrap">';
+      html += '<span class="fw-semibold small">' + c.username + '</span>';
+      html += '<small class="text-muted">' + c.created_at + '</small>';
+      if (c.parent_username) {
+        html += '<small class="text-muted">回复 <span class="text-primary">' + c.parent_username + '</span></small>';
+      }
+      html += '</div>';
+      html += '<div class="mt-1 small">' + c.content.replace(/\n/g, '<br>') + '</div>';
+      if (c.image_url) {
+        html += '<div class="mt-1"><img src="' + c.image_url + '" class="img-thumbnail" style="max-height:120px;"></div>';
+      }
+      if (c.link_url) {
+        html += '<div class="mt-1"><a href="' + c.link_url + '" target="_blank" class="text-primary"><i class="ri ri-link"></i> ' + c.link_url + '</a></div>';
+      }
+      html += '<div class="d-flex align-items-center gap-3 mt-1">';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted comment-like" data-comment-id="' + c.id + '" data-action="like"><i class="ri ' + (c.is_liked === true ? 'ri-thumb-up-fill' : 'ri-thumb-up-line') + '"></i> <small>' + c.likes_count + '</small></button>';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted comment-like" data-comment-id="' + c.id + '" data-action="dislike"><i class="ri ' + (c.is_liked === false ? 'ri-thumb-down-fill' : 'ri-thumb-down-line') + '"></i> <small>' + c.dislikes_count + '</small></button>';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted comment-reply-btn" data-comment-id="' + c.id + '"><i class="ri ri-reply-line"></i> <small>回复</small></button>';
+      if (c.can_delete) {
+        html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-danger comment-delete-btn" data-comment-id="' + c.id + '"><i class="ri ri-delete-bin-line"></i></button>';
+      }
+      html += '</div>';
+      html += '<div class="reply-box mt-1" style="display:none;"><div class="input-group input-group-sm mb-1"><input type="text" class="form-control reply-input" placeholder="回复..."><button class="btn btn-outline-primary reply-submit" data-parent-id="' + c.id + '">发送</button></div><div class="d-flex align-items-center gap-2"><label class="btn btn-xs btn-outline-secondary mb-0"><i class="ri ri-image-line"></i><input type="file" accept="image/*" class="reply-image" data-parent-id="' + c.id + '" style="display:none;"></label><input type="url" class="form-control form-control-xs reply-link" placeholder="链接..." style="max-width:150px;"></div><div class="reply-image-preview mt-1"></div></div>';
+      html += '</div></div></div>';
+
+      if (c.replies && c.replies.length > 0) {
+        html += '<div class="mb-2">';
+        var totalReplies = countAllReplies(c);
+        html += '<button class="btn btn-sm btn-link text-decoration-none text-muted toggle-replies-btn" data-comment-id="' + c.id + '">展开共 ' + totalReplies + ' 条回复</button>';
+        html += '<div class="replies-container mt-1" style="display:none;">';
+        c.replies.forEach(function(r) {
+          html += renderComment(r, true);
+        });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function countAllReplies(c) {
+      var count = c.replies ? c.replies.length : 0;
+      if (c.replies) {
+        c.replies.forEach(function(r) {
+          if (r.replies) count += r.replies.length;
+        });
+      }
+      return count;
+    }
+
+    // 评论图片预览
+    var selectedCommentImage = null;
+    $(document).on('change', '#comment-image', function(e) {
+      var input = e.target;
+      var file = input.files[0];
+      if (file) {
+        selectedCommentImage = file;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          $('#comment-image-preview').html('<div class="position-relative d-inline-block"><img src="' + e.target.result + '" class="img-thumbnail" style="max-height:80px;"><button type="button" class="btn btn-danger btn-sm position-absolute top-0 start-0 translate-middle rounded-circle p-0 remove-comment-img-btn" style="width:20px;height:20px;line-height:18px;">×</button></div>');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        selectedCommentImage = null;
+      }
+    });
+
+    // 删除评论图片
+    $(document).on('click', '.remove-comment-img-btn', function() {
+      $('#comment-image').val('');
+      selectedCommentImage = null;
+      $('#comment-image-preview').empty();
+    });
+
+    // 提交评论
+    $(document).on('click', '#btn-submit-comment', function() {
+      var content = $('#comment-input').val().trim();
+      var linkUrl = $('#comment-link').val().trim();
+      var imageFile = selectedCommentImage;
+      if (!imageFile) {
+        imageFile = $('#comment-image')[0].files[0];
+      }
+      if (!content && !linkUrl && !imageFile) {
+        alert('请输入内容、链接或上传图片');
+        return;
+      }
+      var formData = new FormData();
+      formData.append('post_id', postId);
+      formData.append('content', content);
+      formData.append('link_url', linkUrl);
+      if (imageFile) formData.append('image', imageFile);
+      formData.append('csrfmiddlewaretoken', csrftoken);
+      $.ajax({
+        url: '/add_comment/',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+          if (resp.success) {
+            $('#comment-input').val('');
+            $('#comment-link').val('');
+            $('#comment-image').val('');
+            selectedCommentImage = null;
+            $('#comment-image-preview').empty();
+            loadComments();
+          }
+        }
+      });
+    });
+
+    $('#comment-input').on('keydown', function(e) {
+      if (e.key === 'Enter') $('#btn-submit-comment').click();
+    });
+
+    // 回复
+    $(document).on('click', '.comment-reply-btn', function() {
+      $(this).closest('.d-flex').siblings('.reply-box').toggle();
+    });
+
+    // 回复图片预览
+    var selectedReplyImages = {};
+    $(document).on('change', '.reply-image', function(e) {
+      var input = e.target;
+      var file = input.files[0];
+      var parentId = $(input).data('parent-id');
+      var preview = $(this).closest('.reply-box').find('.reply-image-preview');
+      if (file) {
+        selectedReplyImages[parentId] = file;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          preview.html('<div class="position-relative d-inline-block"><img src="' + e.target.result + '" class="img-thumbnail" style="max-height:60px;"><button type="button" class="btn btn-danger btn-sm position-absolute top-0 start-0 translate-middle rounded-circle p-0 remove-reply-img-btn" style="width:18px;height:18px;line-height:16px;">×</button></div>');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        delete selectedReplyImages[parentId];
+        preview.empty();
+      }
+    });
+
+    // 删除回复图片
+    $(document).on('click', '.remove-reply-img-btn', function() {
+      var parentId = $(this).closest('.reply-box').find('.reply-image').data('parent-id');
+      $(this).closest('.reply-box').find('.reply-image').val('');
+      delete selectedReplyImages[parentId];
+      $(this).closest('.reply-image-preview').empty();
+    });
+
+    $(document).on('click', '.reply-submit', function() {
+      var parentId = $(this).data('parent-id');
+      var box = $(this).closest('.reply-box');
+      var input = box.find('.reply-input');
+      var content = input.val().trim();
+      var linkInput = box.find('.reply-link');
+      var linkUrl = linkInput.val().trim();
+      var imageFile = selectedReplyImages[parentId];
+      if (!imageFile) {
+        imageFile = box.find('.reply-image')[0].files[0];
+      }
+      
+      if (!content && !linkUrl && !imageFile) {
+        alert('请输入内容、链接或上传图片');
+        return;
+      }
+      
+      var formData = new FormData();
+      formData.append('post_id', postId);
+      formData.append('content', content);
+      formData.append('link_url', linkUrl);
+      formData.append('parent_id', parentId);
+      if (imageFile) formData.append('image', imageFile);
+      formData.append('csrfmiddlewaretoken', csrftoken);
+      
+      $.ajax({
+        url: '/add_comment/',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+          if (resp.success) {
+            delete selectedReplyImages[parentId];
+            input.val('');
+            linkInput.val('');
+            box.find('.reply-image').val('');
+            box.find('.reply-image-preview').empty();
+            loadComments();
+          }
+        }
+      });
+    });
+
+    // 折叠/展开回复
+    $(document).on('click', '.toggle-replies-btn', function() {
+      var container = $(this).siblings('.replies-container');
+      var btn = $(this);
+      container.slideToggle(function() {
+        var total = countDisplayedReplies(btn);
+        if (container.is(':visible')) {
+          btn.text('折叠回复');
+        } else {
+          btn.text('展开共 ' + total + ' 条回复');
+        }
+      });
+    });
+
+    function countDisplayedReplies(btn) {
+      var count = 0;
+      btn.closest('.mb-2').find('.replies-container > .mb-3').each(function() {
+        count++;
+        $(this).find('.replies-container > .mb-3').each(function() {
+          count++;
+        });
+      });
+      return count;
+    }
+
+    // 评论点赞/点踩
+    $(document).on('click', '.comment-like', function() {
+      var btn = $(this);
+      $.ajax({
+        url: '/comment_interact/',
+        method: 'POST',
+        data: { comment_id: btn.data('comment-id'), action: btn.data('action'), csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            loadComments();
+          }
+        }
+      });
+    });
+
+    // 删除评论
+    $(document).on('click', '.comment-delete-btn', function() {
+      if (!confirm('确定删除该评论？')) return;
+      var btn = $(this);
+      $.ajax({
+        url: '/delete_comment/',
+        method: 'POST',
+        data: { comment_id: btn.data('comment-id'), csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            loadComments();
+          }
+        }
+      });
+    });
+
+    // 删除帖子
+    $(document).on('click', '#btn-delete-post', function() {
+      if (!confirm('确定删除该帖子？删除后无法恢复。')) return;
+      $.ajax({
+        url: '/delete_post/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            alert('帖子已删除');
+            window.location.href = '/';
+          } else {
+            alert(resp.message || '删除失败');
+          }
+        }
+      });
+    });
+
+    // 初始加载
+    loadComments();
+  });
+
+  function copyLink(url) {
+    var fullUrl = window.location.origin + '/' + url.replace(/^\//, '');
+    navigator.clipboard.writeText(fullUrl).then(function() {
+      alert('链接已复制：' + fullUrl);
+    });
+  }
+
+  // 点击头像显示用户详情
+  // 已移至独立的个人信息页面
+</script>
+{% endblock page_js %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-12">
+    {% if post %}
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center gap-3">
+        <a href="{% url 'user_profile' post.user.id|encrypt_id %}" class="user-avatar-link">
+          <div class="d-block rounded overflow-hidden" style="width:40px;height:40px;">
+            {% with profile=post.user.profile %}
+            {% if profile and profile.avatar %}
+              <img src="{{ profile.avatar.url }}" alt="" class="w-100 h-100 object-fit-cover">
+            {% elif profile and profile.default_avatar %}
+              <img src="{% static profile.default_avatar %}" alt="" class="w-100 h-100 object-fit-cover">
+            {% else %}
+              <div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white"><i class="ri ri-user-line"></i></div>
+            {% endif %}
+            {% endwith %}
+          </div>
+        </a>
+        <div>
+          <div class="fw-semibold">{{ post.user.username }}</div>
+          {% if post.user.profile.school %}
+          <small class="text-muted">{{ post.user.profile.school }}</small>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        {% if post.content %}
+        <div style="white-space:pre-wrap;" class="mb-3">{{ post.content }}</div>
+        {% endif %}
+        {% if post.image %}
+        <div class="mb-3">
+          <img src="{{ post.image.url }}" alt="帖子图片" class="img-fluid rounded">
+        </div>
+        {% endif %}
+        {% if post.link_url %}
+        <div class="mb-3">
+          <span style="white-space:pre-wrap;">🔗 <a href="{{ post.link_url }}" target="_blank" class="text-primary">{{ post.link_url }}</a></span>
+        </div>
+        {% endif %}
+        <small class="text-muted">{{ post.created_at|date:'Y-m-d H:i' }}</small>
+        <div class="d-flex align-items-center gap-3 mt-3">
+          <button class="btn btn-sm btn-link text-decoration-none p-0" id="btn-like-post">
+            <i class="ri {% if is_liked %}ri-heart-fill text-danger{% else %}ri-heart-line{% endif %}"></i>
+            <small id="like-count">{{ like_count }}</small>
+          </button>
+          <button class="btn btn-sm btn-link text-decoration-none p-0" id="btn-favorite-post">
+            <i class="ri {% if is_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %}"></i>
+            <small id="favorite-count">{{ favorite_count }}</small>
+          </button>
+          <span class="text-primary small" style="cursor:pointer;" onclick="copyLink('{% url 'post_detail' post.id|encrypt_id %}')">
+            <i class="ri ri-share-line"></i>
+          </span>
+          {% if user == post.user %}
+          <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger" id="btn-delete-post">
+            <i class="ri ri-delete-bin-line"></i>
+          </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- 评论 -->
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0">评论（<span id="comments-count">0</span>）</h6>
+      </div>
+      <div class="card-body">
+        {% if user.is_authenticated %}
+        <div class="mb-4">
+          <div class="d-flex gap-2 mb-2">
+            <input type="text" class="form-control" id="comment-input" placeholder="写下你的评论...">
+            <button class="btn btn-primary btn-sm flex-shrink-0" id="btn-submit-comment">发送</button>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <label class="btn btn-sm btn-outline-secondary mb-0">
+              <i class="ri ri-image-line"></i> 图片
+              <input type="file" accept="image/*" id="comment-image" style="display:none;">
+            </label>
+            <input type="url" id="comment-link" class="form-control form-control-sm" placeholder="输入链接..." style="max-width:200px;">
+          </div>
+          <div id="comment-image-preview" class="mt-2"></div>
+        </div>
+        {% else %}
+        <div class="text-center text-muted mb-4">
+          <a href="{% url 'login' %}">登录</a> 后即可评论
+        </div>
+        {% endif %}
+        <div id="comments-list"></div>
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="ri ri-error-warning-line ri-2x text-muted d-block mb-2"></i>
+        <h5 class="text-muted">帖子不存在</h5>
+        <p class="text-muted small">该帖子已被删除或链接无效</p>
+        <a href="javascript:history.back()" class="btn btn-outline-primary btn-sm">返回</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock content %}

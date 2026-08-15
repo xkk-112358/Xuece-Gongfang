@@ -1,0 +1,813 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}评论 - {{ upload.file_name }} - 学测工坊{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+{% if upload %}
+<script>
+  var selectedCommentImage = null;
+  
+  function handleCommentImageChange(input) {
+    var file = input.files[0];
+    if (file) {
+      selectedCommentImage = file;
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        $('#comment-image-preview').html('<div class="position-relative d-inline-block"><img src="' + e.target.result + '" class="img-thumbnail" style="max-height:80px;"><button type="button" class="btn btn-danger btn-sm position-absolute top-0 start-0 translate-middle rounded-circle p-0" style="width:20px;height:20px;line-height:18px;" onclick="removeCommentImage()">×</button></div>');
+      };
+      reader.readAsDataURL(file);
+    } else {
+      selectedCommentImage = null;
+    }
+  }
+  
+  function removeCommentImage() {
+    $('#comment-image').val('');
+    selectedCommentImage = null;
+    $('#comment-image-preview').empty();
+  }
+
+  $(function() {
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+    var uploadId = '{{ upload.id|encrypt_id }}';
+
+    function timeAgo(dateStr) {
+      var now = new Date();
+      var date = new Date(dateStr.replace(' ', 'T'));
+      var diffMs = now - date;
+      var diffHours = Math.floor(diffMs / 3600000);
+      var diffDays = Math.floor(diffHours / 24);
+      if (diffHours < 1) return '刚刚';
+      if (diffHours < 24) return diffHours + '小时前';
+      if (diffDays === 1) return '昨天';
+      if (diffDays === 2) return '前天';
+      return dateStr.split(' ')[0];
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(text));
+      return div.innerHTML;
+    }
+
+    function renderComment(comment, isReply) {
+      var avatarHtml = '';
+      if (comment.avatar_url) {
+        avatarHtml = '<img src="' + comment.avatar_url + '" alt="" class="w-100 h-100 object-fit-cover">';
+      } else {
+        avatarHtml = '<div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white" style="font-size:12px"><i class="ri ri-user-line"></i></div>';
+      }
+      var avatarSize = 'width:40px; height:40px';
+      var fontSize = '13px';
+
+      var html = '<div class="comment-item d-flex mb-3" data-comment-id="' + comment.id + '">';
+      html += '<a href="/user_profile/' + comment.encrypted_user_id + '/" class="user-avatar-link flex-shrink-0"><div class="d-block rounded overflow-hidden me-2" style="' + avatarSize + '">' + avatarHtml + '</div></a>';
+      html += '<div class="flex-grow-1 min-w-0">';
+      html += '<div class="d-flex align-items-center gap-2 mb-1 flex-wrap">';
+      html += '<span class="fw-semibold small">' + escapeHtml(comment.username) + '</span>';
+      html += '<span class="text-muted" style="font-size:11px">' + timeAgo(comment.created_at) + '</span>';
+      if (isReply && comment.parent_username) {
+        html += '<span class="text-muted" style="font-size:11px">·</span>';
+        html += '<span class="text-muted" style="font-size:11px">回复 <span class="text-primary">' + escapeHtml(comment.parent_username) + '</span></span>';
+      }
+      html += '</div>';
+      html += '<div class="mb-1" style="font-size:' + fontSize + '">' + escapeHtml(comment.content) + '</div>';
+      if (comment.image_url) {
+        html += '<div class="mb-1"><img src="' + comment.image_url + '" class="img-thumbnail" style="max-height:120px;"></div>';
+      }
+      if (comment.link_url) {
+        html += '<div class="mb-1"><a href="' + escapeHtml(comment.link_url) + '" target="_blank" class="text-primary"><i class="ri ri-link"></i> ' + escapeHtml(comment.link_url) + '</a></div>';
+      }
+      html += '<div class="d-flex align-items-center gap-3">';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-like" data-comment-id="' + comment.id + '">';
+      if (comment.is_liked === true) {
+        html += '<i class="ri ri-thumb-up-fill text-primary" style="font-size:14px"></i>';
+      } else {
+        html += '<i class="ri ri-thumb-up-line" style="font-size:14px"></i>';
+      }
+      html += ' <small class="like-count">' + (comment.likes_count || 0) + '</small>';
+      html += '</button>';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-dislike" data-comment-id="' + comment.id + '">';
+      if (comment.is_liked === false) {
+        html += '<i class="ri ri-heart-3-fill text-warning" style="font-size:14px"></i>';
+      } else {
+        html += '<i class="ri ri-heart-3-line" style="font-size:14px"></i>';
+      }
+      html += ' <small class="dislike-count">' + (comment.dislikes_count || 0) + '</small>';
+      html += '</button>';
+      html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-reply-toggle">';
+      html += '<i class="ri ri-reply-line" style="font-size:14px"></i> <span style="font-size:12px">回复</span>';
+      html += '</button>';
+      if (comment.can_delete) {
+        html += '<button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-comment" data-comment-id="' + comment.id + '">';
+        html += '<i class="ri ri-delete-bin-line" style="font-size:14px"></i>';
+        html += '</button>';
+      }
+      html += '</div>';
+      html += '<div class="reply-form mt-2 d-none">';
+      html += '<div class="input-group input-group-sm mb-1">';
+      html += '<input type="text" class="form-control form-control-sm reply-input" placeholder="回复 ' + escapeHtml(comment.username) + '...">';
+      html += '<button class="btn btn-sm btn-primary btn-submit-reply" data-parent-id="' + comment.id + '">发送</button>';
+      html += '</div>';
+      html += '<div class="d-flex align-items-center gap-2"><label class="btn btn-xs btn-outline-secondary mb-0"><i class="ri ri-image-line"></i><input type="file" accept="image/*" class="reply-image" data-parent-id="' + comment.id + '" style="display:none;"></label><input type="url" class="form-control form-control-xs reply-link" placeholder="链接..." style="max-width:150px;"></div>';
+      html += '<div class="reply-image-preview mt-1"></div>';
+      html += '</div>';
+
+      // 不再递归渲染子评论的子评论，避免嵌套
+      // 所有子评论都在同一层级显示
+
+      html += '</div></div>';
+      return html;
+    }
+
+    $(document).on('click', '.btn-comment-like', function() {
+      var btn = $(this);
+      $.ajax({
+        url: '/comment_interact/',
+        method: 'POST',
+        data: { comment_id: btn.data('comment-id'), action: 'like', csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            var item = btn.closest('.comment-item');
+            btn.find('.like-count').text(resp.likes_count);
+            var dislikeBtn = item.find('.btn-comment-dislike');
+            dislikeBtn.find('.dislike-count').text(resp.dislikes_count);
+            if (resp.action === 'like') {
+              btn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+              dislikeBtn.find('i').removeClass('ri-heart-3-fill text-warning').addClass('ri-heart-3-line');
+            } else if (resp.action === 'none') {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            } else if (resp.action === 'dislike') {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+              dislikeBtn.find('i').removeClass('ri-heart-3-line').addClass('ri-heart-3-fill text-warning');
+            }
+          }
+        }
+      });
+    });
+
+    $(document).on('click', '.btn-comment-dislike', function() {
+      var btn = $(this);
+      $.ajax({
+        url: '/comment_interact/',
+        method: 'POST',
+        data: { comment_id: btn.data('comment-id'), action: 'dislike', csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            var item = btn.closest('.comment-item');
+            btn.find('.dislike-count').text(resp.dislikes_count);
+            var likeBtn = item.find('.btn-comment-like');
+            likeBtn.find('.like-count').text(resp.likes_count);
+            if (resp.action === 'dislike') {
+              btn.find('i').removeClass('ri-heart-3-line').addClass('ri-heart-3-fill text-warning');
+              likeBtn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            } else if (resp.action === 'none') {
+              btn.find('i').removeClass('ri-heart-3-fill text-warning').addClass('ri-heart-3-line');
+            } else if (resp.action === 'like') {
+              btn.find('i').removeClass('ri-heart-3-fill text-warning').addClass('ri-heart-3-line');
+              likeBtn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+            }
+          }
+        }
+      });
+    });
+
+    $(document).on('click', '.btn-reply-toggle', function() {
+      var form = $(this).closest('.comment-item').find('.reply-form');
+      form.toggleClass('d-none');
+      if (!form.hasClass('d-none')) {
+        form.find('.reply-input').focus();
+      }
+    });
+
+    $(document).on('blur', '.reply-input', function() {
+      var input = $(this);
+      if (!input.val().trim()) {
+        setTimeout(function() {
+          input.closest('.reply-form').addClass('d-none');
+        }, 200);
+      }
+    });
+
+    // 回复图片预览
+    var selectedReplyImages = {};
+    $(document).on('change', '.reply-image', function(e) {
+      var input = e.target;
+      var file = input.files[0];
+      var parentId = $(input).data('parent-id');
+      var preview = $(this).closest('.reply-form').find('.reply-image-preview');
+      if (file) {
+        selectedReplyImages[parentId] = file;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          preview.html('<div class="position-relative d-inline-block"><img src="' + e.target.result + '" class="img-thumbnail" style="max-height:60px;"><button type="button" class="btn btn-danger btn-sm position-absolute top-0 start-0 translate-middle rounded-circle p-0 remove-reply-img-btn" style="width:18px;height:18px;line-height:16px;">×</button></div>');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        delete selectedReplyImages[parentId];
+        preview.empty();
+      }
+    });
+
+    // 删除回复图片
+    $(document).on('click', '.remove-reply-img-btn', function() {
+      var parentId = $(this).closest('.reply-form').find('.reply-image').data('parent-id');
+      $(this).closest('.reply-form').find('.reply-image').val('');
+      delete selectedReplyImages[parentId];
+      $(this).closest('.reply-image-preview').empty();
+    });
+
+    $(document).on('click', '.btn-submit-reply', function() {
+      var btn = $(this);
+      var parentId = btn.data('parent-id');
+      var form = btn.closest('.reply-form');
+      var input = form.find('.reply-input');
+      var content = input.val().trim();
+      var linkInput = form.find('.reply-link');
+      var linkUrl = linkInput.val().trim();
+      var imageFile = selectedReplyImages[parentId];
+      if (!imageFile) {
+        imageFile = form.find('.reply-image')[0].files[0];
+      }
+      
+      if (!content && !linkUrl && !imageFile) {
+        alert('请输入内容、链接或上传图片');
+        return;
+      }
+      
+      var formData = new FormData();
+      formData.append('upload_id', uploadId);
+      formData.append('content', content);
+      formData.append('link_url', linkUrl);
+      formData.append('parent_id', parentId);
+      if (imageFile) formData.append('image', imageFile);
+      formData.append('csrfmiddlewaretoken', csrftoken);
+      
+      $.ajax({
+        url: '/add_comment/',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+          if (resp.success) {
+            delete selectedReplyImages[parentId];
+            input.val('');
+            linkInput.val('');
+            form.find('.reply-image').val('');
+            form.find('.reply-image-preview').empty();
+            form.addClass('d-none');
+            var comment = resp.comment;
+            comment.is_liked = null;
+            comment.replies = [];
+            var parentComment = $('[data-comment-id="' + parentId + '"]');
+            var container = parentComment.find('.replies-container');
+            if (container.length) {
+              container.append(renderComment(comment, true));
+            } else {
+              var repliesHtml = '<div class="replies-container mt-2 ps-4 border-start border-2 d-none">' + renderComment(comment, true) + '</div>';
+              parentComment.find('.reply-form').after(repliesHtml);
+              // 添加折叠按钮
+              var foldBtnHtml = '<button class="btn btn-sm btn-link text-decoration-none p-0 text-primary btn-fold-replies" data-comment-id="' + parentId + '" data-count="1"><i class="ri ri-expand-line" style="font-size:14px"></i> 展开共1条评论</button>';
+              parentComment.find('.d-flex.gap-3').append(foldBtnHtml);
+            }
+            // 更新折叠按钮计数
+            var foldBtn = parentComment.find('.btn-fold-replies');
+            if (foldBtn.length) {
+              var newCount = parseInt(foldBtn.attr('data-count')) + 1;
+              foldBtn.attr('data-count', newCount);
+              if (!container.hasClass('d-none')) {
+                foldBtn.html('<i class="ri ri-collapse-line" style="font-size:14px"></i> 折叠');
+              } else {
+                foldBtn.html('<i class="ri ri-expand-line" style="font-size:14px"></i> 展开共' + newCount + '条评论');
+              }
+            }
+            $('#comments-count').text(parseInt($('#comments-count').text()) + 1);
+          }
+        }
+      });
+    });
+
+    $(document).on('click', '.btn-delete-comment', function() {
+      var btn = $(this);
+      if (!confirm('确定要删除这条评论吗？')) return;
+      $.ajax({
+        url: '/delete_comment/',
+        method: 'POST',
+        data: { comment_id: btn.data('comment-id'), csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            var commentItem = btn.closest('.comment-item');
+            var parentId = commentItem.data('parent-id');
+            if (parentId) {
+              // 这是回复，从父评论的回复容器中移除
+              commentItem.remove();
+              var parentComment = $('[data-comment-id="' + parentId + '"]');
+              var repliesContainer = parentComment.find('.replies-container');
+              var remainingReplies = repliesContainer.find('.comment-item').length;
+              if (remainingReplies === 0) {
+                repliesContainer.remove();
+                var foldBtn = parentComment.find('.btn-fold-replies');
+                if (foldBtn.length) {
+                  foldBtn.remove();
+                }
+              } else {
+                var foldBtn = parentComment.find('.btn-fold-replies');
+                if (foldBtn.length) {
+                  foldBtn.attr('data-count', remainingReplies);
+                  if (repliesContainer.hasClass('d-none')) {
+                    foldBtn.html('<i class="ri ri-expand-line" style="font-size:14px"></i> 展开共' + remainingReplies + '条评论');
+                  } else {
+                    foldBtn.html('<i class="ri ri-collapse-line" style="font-size:14px"></i> 折叠');
+                  }
+                }
+              }
+              // 删除子评论也要减少总数
+              $('#comments-count').text(parseInt($('#comments-count').text()) - 1);
+            } else {
+              // 这是主评论，直接移除整个评论块
+              var deletedCount = 1 + commentItem.find('.replies-container .comment-item').length;
+              var currentCount = parseInt($('#comments-count').text());
+              commentItem.remove();
+              $('#comments-count').text(currentCount - deletedCount);
+            }
+          } else {
+            alert(resp.message || '删除失败');
+          }
+        }
+      });
+    });
+
+    $(document).on('click', '.btn-fold-replies', function() {
+      var btn = $(this);
+      var commentId = btn.data('comment-id');
+      var count = parseInt(btn.data('count'));
+      var parentComment = $('[data-comment-id="' + commentId + '"]');
+      var repliesContainer = parentComment.find('.replies-container');
+      
+      if (repliesContainer.hasClass('d-none')) {
+        // 展开
+        repliesContainer.removeClass('d-none');
+        btn.html('<i class="ri ri-collapse-line" style="font-size:14px"></i> 折叠');
+      } else {
+        // 折叠
+        repliesContainer.addClass('d-none');
+        btn.html('<i class="ri ri-expand-line" style="font-size:14px"></i> 展开共' + count + '条评论');
+      }
+    });
+
+    // 提交评论
+    $(document).on('click', '#btn-submit-comment', function() {
+      var content = $('#comment-input').val().trim();
+      var linkUrl = $('#comment-link').val().trim();
+      var imageFile = selectedCommentImage || $('#comment-image')[0].files[0];
+      if (!content && !linkUrl && !imageFile) {
+        alert('请输入内容、链接或上传图片');
+        return;
+      }
+      var formData = new FormData();
+      formData.append('upload_id', uploadId);
+      formData.append('content', content);
+      formData.append('link_url', linkUrl);
+      if (imageFile) formData.append('image', imageFile);
+      formData.append('csrfmiddlewaretoken', csrftoken);
+      $.ajax({
+        url: '/add_comment/',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+          if (resp.success) {
+            $('#comment-input').val('');
+            $('#comment-link').val('');
+            $('#comment-image').val('');
+            selectedCommentImage = null;
+            $('#comment-image-preview').empty();
+            var comment = resp.comment;
+            comment.is_liked = null;
+            comment.replies = [];
+            var html = renderComment(comment, false);
+            $('#comments-list').prepend(html);
+            $('#comments-count').text(parseInt($('#comments-count').text()) + 1);
+          }
+        }
+      });
+    });
+
+    $('#comment-input').on('keydown', function(e) {
+      if (e.key === 'Enter') $('#btn-submit-comment').click();
+    });
+
+    // 收藏题目
+    $(document).on('click', '.favorite-star', function() {
+      var star = $(this);
+      var questionId = star.data('question-id');
+      $.ajax({
+        url: '/toggle_favorite/',
+        method: 'POST',
+        data: { question_id: questionId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            if (resp.is_favorited) {
+              star.removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              star.removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 收藏上传文件
+    $(document).on('click', '#btn-favorite-upload', function() {
+      var btn = $(this);
+      var uploadId = '{{ upload.id|encrypt_id }}';
+      $.ajax({
+        url: '/toggle_file_favorite/',
+        method: 'POST',
+        data: { upload_id: uploadId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            $('#favorite-count').text(resp.favorite_count);
+            if (resp.is_favorited) {
+              btn.find('i').removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              btn.find('i').removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 点赞上传文件
+    $(document).on('click', '#btn-like-upload', function() {
+      var btn = $(this);
+      var uploadId = '{{ upload.id|encrypt_id }}';
+      $.ajax({
+        url: '/upload_like/',
+        method: 'POST',
+        data: { upload_id: uploadId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            $('#like-count').text(resp.count);
+            if (resp.liked) {
+              btn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+            } else {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            }
+          }
+        }
+      });
+    });
+  });
+</script>
+{% endif %}
+{% endblock page_js %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-12">
+    {% if not upload %}
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="ri ri-error-warning-line ri-2x text-muted d-block mb-2"></i>
+        <h5 class="text-muted">文件不存在或已取消共享</h5>
+        <p class="text-muted small">该文件已被删除或用户已关闭分享</p>
+        <a href="javascript:history.back()" class="btn btn-outline-primary btn-sm">返回</a>
+      </div>
+    </div>
+    {% else %}
+    <!-- 顶部文件信息 -->
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+          <a href="{% url 'user_profile' upload.user.id|encrypt_id %}" class="user-avatar-link">
+            <div class="d-block rounded overflow-hidden" style="width:48px; height:48px;">
+              <img src="{{ upload.user|avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+            </div>
+          </a>
+          <div>
+            <h5 class="mb-0">
+              <a href="javascript:history.back()" class="text-decoration-none me-2">
+                <i class="ri ri-arrow-left-line"></i>
+              </a>
+              {{ upload.user.username }}
+            </h5>
+            {% if upload.user.profile.school %}
+            <small class="text-muted">{{ upload.user.profile.school }}</small>
+            {% endif %}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <button class="btn btn-sm btn-link text-decoration-none p-0" id="btn-like-upload">
+            <i class="ri {% if is_liked %}ri-heart-fill text-danger{% else %}ri-heart-line{% endif %}"></i> <span id="like-count">{{ like_count }}</span>
+          </button>
+          <button class="btn btn-sm btn-link text-decoration-none p-0" id="btn-favorite-upload">
+            <i class="ri {% if is_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %}"></i> <span id="favorite-count">{{ favorite_count }}</span>
+          </button>
+          <span class="text-muted"><i class="ri ri-chat-1-line"></i> <span id="comments-count">{{ total_comments }}</span></span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="mb-2">
+          <small class="text-muted">文件名：</small>
+          <div class="fw-medium">{{ upload.file_name }}</div>
+        </div>
+        {% if upload.description %}
+        <div class="mb-2">
+          <small class="text-muted">描述：</small>
+          <div>{{ upload.description }}</div>
+        </div>
+        {% endif %}
+        <div class="mb-2">
+          <small class="text-muted">上传时间：</small>
+          <div>{{ upload.uploaded_at|date:'Y-m-d H:i' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 题目列表 -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h6 class="mb-0">{{ questions|length }} 道题目</h6>
+      </div>
+      <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+        {% for q in questions %}
+        <div class="mb-3 pb-3 {% if not forloop.last %}border-bottom{% endif %} math-content math-lazy">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="fw-medium mb-1 flex-grow-1" style="white-space:pre-wrap;">{{ q.content|render_content|safe }}</div>
+            {% if user.is_authenticated %}
+            <span class="ri {% if q.id in favorited_question_ids %}ri-star-fill text-warning{% else %}ri-star-line{% endif %} favorite-star ms-2 flex-shrink-0" data-question-id="{{ q.id }}" style="cursor:pointer;font-size:1.2rem;"></span>
+            {% endif %}
+          </div>
+          <div class="text-success small math-content math-lazy">答案：{{ q.answer|render_content|safe }}</div>
+          {% if q.tags %}
+          <div class="mt-1">
+            {% for tag in q.tags.split %}
+            <span class="badge bg-label-primary me-1">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% empty %}
+        <div class="text-muted text-center py-3">暂无题目</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 评论区 -->
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="ri ri-chat-1-line me-1"></i> 评论 ({{ total_comments }})</h6>
+      </div>
+      <div class="card-body">
+        {% if user.is_authenticated %}
+        <div class="mb-4">
+          <div class="input-group mb-2">
+            <input type="text" id="comment-input" class="form-control" placeholder="发表评论...">
+            <button class="btn btn-primary" id="btn-submit-comment">发送</button>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <label class="btn btn-sm btn-outline-secondary mb-0">
+              <i class="ri ri-image-line"></i> 图片
+              <input type="file" accept="image/*" id="comment-image" style="display:none;" onchange="handleCommentImageChange(this);">
+            </label>
+            <input type="url" id="comment-link" class="form-control form-control-sm" placeholder="输入链接..." style="max-width:200px;">
+          </div>
+          <div id="comment-image-preview" class="mt-2"></div>
+        </div>
+        {% else %}
+        <div class="text-center mb-4">
+          <a href="/login/?next={{ request.path }}" class="text-primary">登录</a> 后可以发表评论
+        </div>
+        {% endif %}
+
+        <div id="comments-list">
+          {% for comment in comments %}
+          <div class="comment-item d-flex mb-3" data-comment-id="{{ comment.id }}">
+            <a href="{% url 'user_profile' comment.user.id|encrypt_id %}" class="user-avatar-link flex-shrink-0">
+            <div class="d-block rounded overflow-hidden me-2" style="width:40px; height:40px;">
+              <img src="{{ comment.user|avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+            </div>
+          </a>
+            <div class="flex-grow-1 min-w-0">
+              <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                <span class="fw-semibold small">{{ comment.user.username }}</span>
+                <span class="text-muted" style="font-size:11px">{{ comment.created_at|timesince }}前</span>
+              </div>
+              <div class="mb-1" style="font-size:13px">{{ comment.content|linebreaksbr }}</div>
+              {% if comment.image %}
+              <div class="mb-1"><img src="{{ comment.image.url }}" class="img-thumbnail" style="max-height:120px;"></div>
+              {% endif %}
+              {% if comment.link_url %}
+              <div class="mb-1"><a href="{{ comment.link_url }}" target="_blank" class="text-primary"><i class="ri ri-link"></i> {{ comment.link_url }}</a></div>
+              {% endif %}
+              <div class="d-flex align-items-center gap-3">
+                {% if user.is_authenticated %}
+                <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-like" data-comment-id="{{ comment.id }}">
+                  {% with interaction=user_comment_interactions|get:comment.id %}
+                  {% if interaction == True %}
+                  <i class="ri ri-thumb-up-fill text-primary" style="font-size:14px"></i>
+                  {% else %}
+                  <i class="ri ri-thumb-up-line" style="font-size:14px"></i>
+                  {% endif %}
+                  {% endwith %}
+                  <small class="like-count">{{ comment.likes_count }}</small>
+                </button>
+                <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-dislike" data-comment-id="{{ comment.id }}">
+                  {% with interaction=user_comment_interactions|get:comment.id %}
+                  {% if interaction == False %}
+                  <i class="ri ri-heart-3-fill text-warning" style="font-size:14px"></i>
+                  {% else %}
+                  <i class="ri ri-heart-3-line" style="font-size:14px"></i>
+                  {% endif %}
+                  {% endwith %}
+                  <small class="dislike-count">{{ comment.dislikes_count }}</small>
+                </button>
+                <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-reply-toggle">
+                  <i class="ri ri-reply-line" style="font-size:14px"></i> <span style="font-size:12px">回复</span>
+                </button>
+                {% if comment.id in can_delete_comments %}
+                <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-comment" data-comment-id="{{ comment.id }}">
+                  <i class="ri ri-delete-bin-line" style="font-size:14px"></i>
+                </button>
+                {% endif %}
+                {% with replies=comment.replies.all %}
+                {% if replies|length > 0 %}
+                <button class="btn btn-sm btn-link text-decoration-none p-0 text-primary btn-fold-replies" data-comment-id="{{ comment.id }}" data-count="{{ replies|length }}">
+                  <i class="ri ri-expand-line" style="font-size:14px"></i> 展开共{{ replies|length }}条评论
+                </button>
+                {% endif %}
+                {% endwith %}
+                {% else %}
+                <small class="text-muted"><i class="ri ri-heart-line" style="font-size:14px"></i> {{ comment.likes_count }}</small>
+                <small class="text-muted"><i class="ri ri-heart-3-line" style="font-size:14px"></i> {{ comment.dislikes_count }}</small>
+                {% endif %}
+              </div>
+              <div class="reply-form mt-2 d-none">
+                <div class="input-group input-group-sm">
+                  <input type="text" class="form-control form-control-sm reply-input" placeholder="回复 {{ comment.user.username }}...">
+                  <button class="btn btn-sm btn-primary btn-submit-reply" data-parent-id="{{ comment.id }}">发送</button>
+                </div>
+              </div>
+
+              {% with replies=comment.replies.all %}
+              {% if replies|length > 0 %}
+              <div class="replies-container mt-2 ps-4 border-start border-2 d-none">
+                {% for r in replies %}
+                <div class="comment-item d-flex mb-3" data-comment-id="{{ r.id }}">
+                  <a href="{% url 'user_profile' r.user.id|encrypt_id %}" class="user-avatar-link flex-shrink-0">
+                  <div class="d-block rounded overflow-hidden me-2" style="width:40px; height:40px;">
+                    <img src="{{ r.user|avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+                  </div>
+                </a>
+                  <div class="flex-grow-1 min-w-0">
+                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                      <span class="fw-semibold small">{{ r.user.username }}</span>
+                      <span class="text-muted" style="font-size:11px">{{ r.created_at|timesince }}前</span>
+                      <span class="text-muted" style="font-size:11px">·</span>
+                      <span class="text-muted" style="font-size:11px">回复 <span class="text-primary">{{ comment.user.username }}</span></span>
+                    </div>
+                    <div class="mb-1" style="font-size:13px">{{ r.content|linebreaksbr }}</div>
+                    <div class="d-flex align-items-center gap-3">
+                      {% if user.is_authenticated %}
+                      <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-like" data-comment-id="{{ r.id }}">
+                        {% with interaction=user_comment_interactions|get:r.id %}
+                        {% if interaction == True %}
+                        <i class="ri ri-thumb-up-fill text-primary" style="font-size:14px"></i>
+                        {% else %}
+                        <i class="ri ri-thumb-up-line" style="font-size:14px"></i>
+                        {% endif %}
+                        {% endwith %}
+                        <small class="like-count">{{ r.likes_count }}</small>
+                      </button>
+                      <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-dislike" data-comment-id="{{ r.id }}">
+                        {% with interaction=user_comment_interactions|get:r.id %}
+                        {% if interaction == False %}
+                        <i class="ri ri-heart-3-fill text-warning" style="font-size:14px"></i>
+                        {% else %}
+                        <i class="ri ri-heart-3-line" style="font-size:14px"></i>
+                        {% endif %}
+                        {% endwith %}
+                        <small class="dislike-count">{{ r.dislikes_count }}</small>
+                      </button>
+                      <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-reply-toggle">
+                        <i class="ri ri-reply-line" style="font-size:14px"></i> <span style="font-size:12px">回复</span>
+                      </button>
+                      {% if r.id in can_delete_comments %}
+                      <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-comment" data-comment-id="{{ r.id }}">
+                        <i class="ri ri-delete-bin-line" style="font-size:14px"></i>
+                      </button>
+                      {% endif %}
+                      {% with subreplies=r.replies.all %}
+                      {% if subreplies|length > 0 %}
+                      <button class="btn btn-sm btn-link text-decoration-none p-0 text-primary btn-fold-replies" data-comment-id="{{ r.id }}" data-count="{{ subreplies|length }}">
+                        <i class="ri ri-expand-line" style="font-size:14px"></i> 展开共{{ subreplies|length }}条评论
+                      </button>
+                      {% endif %}
+                      {% endwith %}
+                      {% else %}
+                      <small class="text-muted"><i class="ri ri-heart-line" style="font-size:14px"></i> {{ r.likes_count }}</small>
+                      <small class="text-muted"><i class="ri ri-heart-3-line" style="font-size:14px"></i> {{ r.dislikes_count }}</small>
+                      {% endif %}
+                    </div>
+                    <div class="reply-form mt-2 d-none">
+                      <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-sm reply-input" placeholder="回复 {{ r.user.username }}...">
+                        <button class="btn btn-sm btn-primary btn-submit-reply" data-parent-id="{{ r.id }}">发送</button>
+                      </div>
+                    </div>
+                    {% with subreplies=r.replies.all %}
+                    {% if subreplies|length > 0 %}
+                    <div class="replies-container mt-2 ps-4 border-start border-2 d-none">
+                      {% for sr in subreplies %}
+                      <div class="comment-item d-flex mb-3" data-comment-id="{{ sr.id }}">
+                        <a href="{% url 'user_profile' sr.user.id|encrypt_id %}" class="user-avatar-link flex-shrink-0">
+                        <div class="d-block rounded overflow-hidden me-2" style="width:40px; height:40px;">
+                          <img src="{{ sr.user|avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+                        </div>
+                      </a>
+                        <div class="flex-grow-1 min-w-0">
+                          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                            <span class="fw-semibold small">{{ sr.user.username }}</span>
+                            <span class="text-muted" style="font-size:11px">{{ sr.created_at|timesince }}前</span>
+                            <span class="text-muted" style="font-size:11px">·</span>
+                            <span class="text-muted" style="font-size:11px">回复 <span class="text-primary">{{ r.user.username }}</span></span>
+                          </div>
+                          <div class="mb-1" style="font-size:13px">{{ sr.content|linebreaksbr }}</div>
+                          <div class="d-flex align-items-center gap-3">
+                            {% if user.is_authenticated %}
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-like" data-comment-id="{{ sr.id }}">
+                              <i class="ri ri-thumb-up-line" style="font-size:14px"></i>
+                              <small class="like-count">{{ sr.likes_count }}</small>
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-comment-dislike" data-comment-id="{{ sr.id }}">
+                              <i class="ri ri-heart-3-line" style="font-size:14px"></i>
+                              <small class="dislike-count">{{ sr.dislikes_count }}</small>
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted btn-reply-toggle">
+                              <i class="ri ri-reply-line" style="font-size:14px"></i> <span style="font-size:12px">回复</span>
+                            </button>
+                            {% if sr.id in can_delete_comments %}
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-comment" data-comment-id="{{ sr.id }}">
+                              <i class="ri ri-delete-bin-line" style="font-size:14px"></i>
+                            </button>
+                            {% endif %}
+                            {% else %}
+                            <small class="text-muted"><i class="ri ri-heart-line" style="font-size:14px"></i> {{ sr.likes_count }}</small>
+                            <small class="text-muted"><i class="ri ri-heart-3-line" style="font-size:14px"></i> {{ sr.dislikes_count }}</small>
+                            {% endif %}
+                          </div>
+                          <div class="reply-form mt-2 d-none">
+                            <div class="input-group input-group-sm">
+                              <input type="text" class="form-control form-control-sm reply-input" placeholder="回复 {{ sr.user.username }}...">
+                              <button class="btn btn-sm btn-primary btn-submit-reply" data-parent-id="{{ sr.id }}">发送</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% endwith %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="text-muted text-center py-4">
+            <i class="ri ri-chat-1-line ri-2x d-block mb-2"></i>
+            <small>暂无评论，来发表第一条评论吧</small>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock content %}

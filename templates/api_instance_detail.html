@@ -1,0 +1,380 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}{{ instance.name }} - 实例详情{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/api_management/">接口文档</a></li>
+        <li class="breadcrumb-item active">{{ instance.name }}</li>
+      </ol>
+    </nav>
+
+    <!-- 实例信息卡片 -->
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="ri ri-key-2-line me-2"></i>{{ instance.name }}</h5>
+        <div>
+          {% if instance.is_active %}
+          <span class="badge bg-success">启用</span>
+          {% else %}
+          <span class="badge bg-secondary">停用</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block">API Key</small>
+              <code style="font-size:0.85rem;user-select:all;cursor:pointer;" onclick="copyText(this)" title="点击复制">{{ instance.api_key }}</code>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block">创建时间</small>
+              <span>{{ instance.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block">JSON 文件</small>
+              <a href="/api/json_file/{{ instance.id }}/" target="_blank" style="text-decoration:none;">
+                <i class="ri ri-file-code-line"></i> {{ filename_only }}
+              </a>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block">相关文件</small>
+              {% with file_count=files|length %}
+              {% if file_count > 0 %}
+              <a href="#files-section" class="btn btn-sm btn-outline-success">
+                <i class="ri ri-file-list-line"></i> {{ file_count }} 个文件
+              </a>
+              {% else %}
+              <span class="text-muted">暂无文件</span>
+              {% endif %}
+              {% endwith %}
+              {% if instance.user_id == request.user.id %}
+              <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="uploadScript('{{ instance.id }}')">
+                <i class="ri ri-upload-line"></i> 上传文件
+              </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {% if instance.user_id == request.user.id %}
+        <div class="mt-3">
+          <a href="/api/json_file/{{ instance.id }}/" target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="ri ri-file-code-line"></i> 打开 JSON 文件
+          </a>
+          <a href="/api/script_explanation/" class="btn btn-outline-info btn-sm">
+            <i class="ri ri-book-open-line"></i> 案例解释
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 文件列表 -->
+    <div class="card mb-4" id="files-section">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="ri ri-file-list-line me-2"></i>文件列表 ({{ files|length }})</h5>
+        {% if instance.user_id == request.user.id %}
+        <button type="button" class="btn btn-sm btn-primary" onclick="uploadScript('{{ instance.id }}')">
+          <i class="ri ri-upload-line"></i> 上传文件
+        </button>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if files %}
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>文件名</th>
+                <th>路径</th>
+                <th>上传时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in files %}
+              <tr>
+                <td><i class="ri ri-file-line me-1"></i> {{ f.original_name }}</td>
+                <td><code style="font-size:0.8rem;">{{ f.file_path|default:"/" }}</code></td>
+                <td><small class="text-muted">{{ f.uploaded_at|date:"Y-m-d H:i" }}</small></td>
+                <td>
+                  <a href="{{ f.file.url }}" target="_blank" class="btn btn-sm btn-outline-success" title="下载">
+                    <i class="ri ri-download-line"></i>
+                  </a>
+                  {% if instance.user_id == request.user.id %}
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteFile({{ f.id }}, '{{ f.original_name|escapejs }}')" title="删除">
+                    <i class="ri ri-delete-bin-line"></i>
+                  </button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="ri ri-upload-cloud-line" style="font-size:2rem;"></i>
+          <p class="mt-2 mb-0">暂无文件</p>
+          {% if instance.user_id == request.user.id %}
+          <button type="button" class="btn btn-sm btn-primary mt-2" onclick="uploadScript('{{ instance.id }}')">
+            <i class="ri ri-upload-line"></i> 上传文件
+          </button>
+          <p class="text-muted small mt-2">支持单个文件、文件夹(多选)、压缩包(自动解压)</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 评论区 -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="ri ri-chat-3-line me-2"></i>评论 ({{ comments|length }})</h5>
+      </div>
+      <div class="card-body">
+        {% if user.is_authenticated %}
+        <form onsubmit="return submitComment(event)" class="mb-4">
+          <div class="mb-2">
+            <textarea class="form-control" id="commentContent" rows="2" placeholder="写下你的评论..." required></textarea>
+          </div>
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <input type="file" id="commentImage" accept="image/*" style="display:none;" onchange="handleCommentImage(this)">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('commentImage').click()">
+                <i class="ri ri-image-add-line"></i> 图片
+              </button>
+              <span id="commentImageName" class="text-muted small ms-2"></span>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" id="commentSubmitBtn">
+              <i class="ri ri-send-plane-line"></i> 发表评论
+            </button>
+          </div>
+        </form>
+        {% else %}
+        <div class="alert alert-info">请<a href="/login/">登录</a>后发表评论</div>
+        {% endif %}
+
+        <div id="commentsContainer">
+          {% for comment in comments %}
+          <div class="d-flex mb-3 p-3 bg-light rounded" id="comment-{{ comment.id }}">
+            <div class="flex-shrink-0 me-2">
+              <div class="w-px-36 h-px-36 rounded overflow-hidden bg-secondary d-flex align-items-center justify-content-center text-white" style="width:36px;height:36px;">
+                {% with avatar_url=comment.user.profile.get_avatar_url %}
+                {% if avatar_url %}
+                <img src="{{ avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+                {% else %}
+                <i class="ri ri-user-line" style="font-size:14px;"></i>
+                {% endif %}
+                {% endwith %}
+              </div>
+            </div>
+            <div class="flex-grow-1">
+              <div class="d-flex justify-content-between align-items-center">
+                <strong style="font-size:0.9rem;">{{ comment.user.username }}</strong>
+                <small class="text-muted">{{ comment.created_at|date:"Y-m-d H:i" }}</small>
+              </div>
+              <div class="mt-1" style="font-size:0.9rem;">{{ comment.content|linebreaksbr }}</div>
+              {% if comment.image %}
+              <div class="mt-1">
+                <a href="{{ comment.image.url }}" target="_blank">
+                  <img src="{{ comment.image.url }}" class="img-thumbnail" style="max-height:120px;">
+                </a>
+              </div>
+              {% endif %}
+              {% if comment.link_url %}
+              <div class="mt-1">
+                <a href="{{ comment.link_url }}" target="_blank" class="small">{{ comment.link_url }}</a>
+              </div>
+              {% endif %}
+              <div class="mt-1 d-flex gap-2">
+                {% if comment.user == request.user or instance.user == request.user %}
+                <button class="btn btn-sm p-0 border-0 bg-transparent text-danger" onclick="deleteComment({{ comment.id }})">
+                  <i class="ri ri-delete-bin-line"></i>
+                </button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="text-center text-muted py-4">
+            <i class="ri ri-chat-3-line" style="font-size:2rem;"></i>
+            <p class="mt-2 mb-0">暂无评论，快来发表第一条评论吧</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 上传文件模态框 -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">上传文件</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="uploadForm" onsubmit="return submitUpload(event)">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">选择文件</label>
+            <input type="file" class="form-control" name="script_file" id="fileInput" multiple webkitdirectory>
+            <div class="form-text">支持单个文件、文件夹(自动识别多文件)、压缩包.zip/.tar.gz(自动解压)</div>
+            <div id="fileCount" class="small text-muted mt-1"></div>
+          </div>
+          <input type="hidden" name="instance_id" id="uploadInstanceId" value="">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">上传</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_js %}
+<style>
+.w-px-36 { width:36px; }
+.h-px-36 { height:36px; }
+</style>
+<script>
+function getCookie(name) {
+    var v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+}
+var csrftoken = getCookie('csrftoken');
+
+function copyText(el) {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+    var orig = el.innerHTML;
+    el.innerHTML = '✅ 已复制';
+    setTimeout(function(){ el.innerHTML = orig; }, 1500);
+}
+
+// === 文件上传 ===
+function uploadScript(id) {
+    document.getElementById('uploadInstanceId').value = id;
+    // Reset file input and count
+    document.getElementById('fileInput').value = '';
+    document.getElementById('fileCount').textContent = '';
+    new bootstrap.Modal(document.getElementById('uploadModal')).show();
+}
+
+// Show file count when files are selected
+document.addEventListener('DOMContentLoaded', function() {
+    var fi = document.getElementById('fileInput');
+    if (fi) {
+        fi.addEventListener('change', function() {
+            var count = this.files ? this.files.length : 0;
+            var fc = document.getElementById('fileCount');
+            if (count > 1) {
+                fc.textContent = '已选择 ' + count + ' 个文件（文件夹上传）';
+            } else if (count === 1) {
+                fc.textContent = '已选择: ' + this.files[0].name;
+            } else {
+                fc.textContent = '';
+            }
+        });
+    }
+});
+
+function submitUpload(e) {
+    e.preventDefault();
+    var btn = document.getElementById('uploadSubmitBtn');
+    btn.disabled = true; btn.textContent = '上传中...';
+    var formData = new FormData(document.getElementById('uploadForm'));
+    fetch('/api/upload_script/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        body: formData
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); btn.disabled = false; btn.textContent = '上传'; }
+    }).catch(function(err){
+        alert('请求失败: ' + err.message);
+        btn.disabled = false; btn.textContent = '上传';
+    });
+    return false;
+}
+
+function deleteFile(fileId, fileName) {
+    if (!confirm('确认删除文件「' + fileName + '」？')) return;
+    fetch('/api/delete_file/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({file_id: fileId})
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); }
+    });
+}
+
+// === 评论 ===
+function handleCommentImage(input) {
+    var name = input.files && input.files[0] ? input.files[0].name : '';
+    document.getElementById('commentImageName').textContent = name;
+}
+
+function submitComment(e) {
+    e.preventDefault();
+    var content = document.getElementById('commentContent').value.trim();
+    if (!content) { alert('请输入评论内容'); return false; }
+    var btn = document.getElementById('commentSubmitBtn');
+    btn.disabled = true; btn.innerHTML = '<i class="ri ri-loader-4-line spinning"></i> 发表中...';
+    var formData = new FormData();
+    formData.append('api_instance_id', '{{ instance.id }}');
+    formData.append('content', content);
+    var imgInput = document.getElementById('commentImage');
+    if (imgInput.files && imgInput.files[0]) {
+        formData.append('image', imgInput.files[0]);
+    }
+    fetch('/add_comment/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        body: formData
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); btn.disabled = false; btn.innerHTML = '<i class="ri ri-send-plane-line"></i> 发表评论'; }
+    }).catch(function(err){
+        alert('请求失败: ' + err.message);
+        btn.disabled = false; btn.innerHTML = '<i class="ri ri-send-plane-line"></i> 发表评论';
+    });
+    return false;
+}
+
+function deleteComment(commentId) {
+    if (!confirm('确认删除此评论？')) return;
+    fetch('/delete_comment/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({comment_id: commentId})
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { document.getElementById('comment-' + commentId).remove(); }
+        else { alert(d.message); }
+    });
+}
+</script>
+{% endblock %}

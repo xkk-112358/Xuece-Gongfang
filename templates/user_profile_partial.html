@@ -1,0 +1,210 @@
+{% load app1_extras %}
+<div class="w-100">
+    {% if user.is_authenticated and target_user and user != target_user %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title mb-0">用户信息</h5>
+                <a href="#" id="close-user-profile" class="text-muted" style="font-size:1.5rem; text-decoration:none; cursor:pointer;">&times;</a>
+            </div>
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-circle me-3 overflow-hidden flex-shrink-0" style="width:64px;height:64px;">
+                    <img src="{{ avatar_url }}" alt="头像" class="w-100 h-100" style="object-fit:cover;">
+                </div>
+                <div>
+                    <h6 class="mb-0">{{ target_user.username }}</h6>
+                    {% if school %}
+                    <small class="text-muted">{{ school }}</small>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="d-flex gap-2 text-muted mb-3">
+                <span>关注 {{ following_count }}</span>
+                <span>粉丝 {{ follower_count }}</span>
+                {% if age %}
+                <span>{{ age }}岁</span>
+                {% endif %}
+            </div>
+            <button id="btn-follow" class="btn w-100 {% if is_following %}btn-danger{% else %}btn-primary{% endif %}">
+                {% if is_following %}取消关注{% else %}关注{% endif %}
+            </button>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h6 class="mb-0">共享文件 ({{ total_shared_count }})</h6>
+        </div>
+        <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+            {% if shared_folders %}
+            <div class="px-3 pt-2 pb-1 border-bottom bg-light">
+                <small class="text-muted fw-bold"><i class="ri ri-folder-3-fill text-warning me-1"></i>共享文件夹</small>
+            </div>
+            {% for folder in shared_folders %}
+            <div class="p-3 border-bottom">
+                <h6 class="mb-1"><i class="ri ri-folder-3-fill text-warning me-1"></i>{{ folder.folder_name }}</h6>
+                {% if folder.description %}
+                <p class="text-muted small mb-1">{{ folder.description|truncatewords:10 }}</p>
+                {% endif %}
+                <div class="text-muted small mb-2">
+                    <span>{{ folder.file_count }}个文件</span>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/browse_folder/{{ folder.folder_path }}/?owner_id={{ target_user.id|encrypt_id }}" class="btn btn-sm btn-outline-warning flex-grow-1">打开</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% if shared_uploads %}
+            {% if shared_folders %}<div class="px-3 pt-2 pb-1 border-bottom bg-light"><small class="text-muted fw-bold"><i class="ri ri-file-text-line me-1"></i>文件</small></div>{% endif %}
+            {% for upload in shared_uploads %}
+            <div class="p-3 border-bottom">
+                <h6 class="mb-1">{{ upload.file_name }}</h6>
+                {% if upload.description %}
+                <p class="text-muted small mb-1">{{ upload.description|truncatewords:10 }}</p>
+                {% endif %}
+                <div class="text-muted small mb-2">
+                    <span class="me-2">喜欢 {{ upload.likes.count }}</span>
+                    <span class="me-2">收藏 {{ upload.favorited_by.count }}</span>
+                    <span>{{ upload.total_questions }}题</span>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/comment_page/{{ upload.id }}/" class="btn btn-sm btn-outline-primary flex-grow-1">查看</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center py-4">
+                <p class="text-muted mb-0">暂无共享文件</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% else %}
+    {% if target_user %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title mb-0">用户信息</h5>
+                <a href="#" id="close-user-profile" class="text-muted" style="font-size:1.5rem; text-decoration:none; cursor:pointer;">&times;</a>
+            </div>
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-circle me-3 overflow-hidden flex-shrink-0" style="width:64px;height:64px;">
+                    <img src="{{ avatar_url }}" alt="头像" class="w-100 h-100" style="object-fit:cover;">
+                </div>
+                <div>
+                    <h6 class="mb-0">{{ target_user.username }}</h6>
+                    {% if school %}
+                    <small class="text-muted">{{ school }}</small>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="d-flex gap-2 text-muted mb-3">
+                <span>关注 {{ following_count }}</span>
+                <span>粉丝 {{ follower_count }}</span>
+                {% if age %}
+                <span>{{ age }}岁</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h6 class="mb-0">共享文件 ({{ total_shared_count }})</h6>
+        </div>
+        <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+            {% if shared_folders %}
+            <div class="px-3 pt-2 pb-1 border-bottom bg-light">
+                <small class="text-muted fw-bold"><i class="ri ri-folder-3-fill text-warning me-1"></i>共享文件夹</small>
+            </div>
+            {% for folder in shared_folders %}
+            <div class="p-3 border-bottom">
+                <h6 class="mb-1"><i class="ri ri-folder-3-fill text-warning me-1"></i>{{ folder.folder_name }}</h6>
+                {% if folder.description %}
+                <p class="text-muted small mb-1">{{ folder.description|truncatewords:10 }}</p>
+                {% endif %}
+                <div class="text-muted small mb-2">
+                    <span>{{ folder.file_count }}个文件</span>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/browse_folder/{{ folder.folder_path }}/?owner_id={{ target_user.id|encrypt_id }}" class="btn btn-sm btn-outline-warning flex-grow-1">打开</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% if shared_uploads %}
+            {% if shared_folders %}<div class="px-3 pt-2 pb-1 border-bottom bg-light"><small class="text-muted fw-bold"><i class="ri ri-file-text-line me-1"></i>文件</small></div>{% endif %}
+            {% for upload in shared_uploads %}
+            <div class="p-3 border-bottom">
+                <h6 class="mb-1">{{ upload.file_name }}</h6>
+                {% if upload.description %}
+                <p class="text-muted small mb-1">{{ upload.description|truncatewords:10 }}</p>
+                {% endif %}
+                <div class="text-muted small mb-2">
+                    <span class="me-2">喜欢 {{ upload.likes.count }}</span>
+                    <span class="me-2">收藏 {{ upload.favorited_by.count }}</span>
+                    <span>{{ upload.total_questions }}题</span>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/comment_page/{{ upload.id }}/" class="btn btn-sm btn-outline-primary flex-grow-1">查看</a>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center py-4">
+                <p class="text-muted mb-0">暂无共享文件</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    {% endif %}
+</div>
+
+<script>
+(function() {
+    var btn = document.getElementById('btn-follow');
+    if (btn) {
+        btn.addEventListener('click', function() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/toggle_follow/', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-CSRFToken', '{{ csrf_token_value }}');
+            xhr.onload = function() {
+                var resp = JSON.parse(xhr.responseText);
+                if (resp.success) {
+                    if (resp.is_following) {
+                        btn.className = 'btn btn-danger w-100';
+                        btn.textContent = '取消关注';
+                    } else {
+                        btn.className = 'btn btn-primary w-100';
+                        btn.textContent = '关注';
+                    }
+                    
+                    // 更新个人中心页面的关注/粉丝数
+                    updateMyFollowCounts(resp.following_count, resp.follower_count);
+                }
+            };
+            xhr.send('target_user_id={{ target_user.id|encrypt_id }}');
+        });
+    }
+})();
+
+// 更新个人中心的关注/粉丝数
+function updateMyFollowCounts(followingCount, followerCount) {
+    var followingEl = document.querySelector('.following-count');
+    var followerEl = document.querySelector('.follower-count');
+    
+    if (followingEl) {
+        followingEl.textContent = followingCount;
+    }
+    if (followerEl) {
+        followerEl.textContent = followerCount;
+    }
+}
+</script>

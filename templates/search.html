@@ -1,0 +1,418 @@
+{% extends "layout/layout_vertical.html" %}
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}搜索 - 学测工坊{% endblock %}
+
+
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-12">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h4 class="mb-3"><i class="ri ri-search-line me-1"></i>搜索</h4>
+        
+        <form method="get" action="/search/" id="search-form">
+          <div class="row g-2 mb-3">
+            <div class="col-md-10">
+              <input type="text" class="form-control" id="search-keyword" name="keyword" placeholder="输入搜索关键词..." value="{{ keyword }}">
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">
+                <i class="ri ri-search-line me-1"></i>搜索
+              </button>
+            </div>
+          </div>
+          
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <select class="form-select" name="type" id="search-type">
+                <option value="all" {% if search_type == 'all' %}selected{% endif %}>全部</option>
+                <option value="post" {% if search_type == 'post' %}selected{% endif %}>帖子</option>
+                <option value="file" {% if search_type == 'file' %}selected{% endif %}>用户分享文件</option>
+                <option value="question" {% if search_type == 'question' %}selected{% endif %}>题目</option>
+                <option value="api" {% if search_type == 'api' %}selected{% endif %}>API</option>
+                <option value="user" {% if search_type == 'user' %}selected{% endif %}>用户</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <select class="form-select" name="school" id="search-school">
+                <option value="">全部学校</option>
+                {% for s in schools %}
+                <option value="{{ s }}" {% if school == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3" id="subject-container" {% if search_type not in 'all,file,question' %}style="display:none;"{% endif %}>
+              <select class="form-select" name="subject" id="search-subject">
+                <option value="">全部学科</option>
+                {% for subj in all_subjects %}
+                <option value="{{ subj }}" {% if subject == subj %}selected{% endif %}>{{ subj }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </form>
+        
+        {% if search_type == 'question' %}{% if all_tags or grouped_tags %}
+        <div class="mb-3" id="tags-section">
+          <small class="text-muted me-2">知识点标签：</small>
+          <div id="tags-container">
+            {% for group_name, tags in grouped_tags.items %}
+            {% if group_name != '学科' and tags %}
+            <div class="mb-2">
+              <strong class="text-dark">{{ group_name }}：</strong>
+              <div class="d-inline-flex flex-wrap gap-1 tag-group" data-group="{{ group_name }}">
+                {% for tag in tags %}
+                <span class="badge tag-item {% if tag in selected_tags %}bg-danger{% else %}bg-secondary{% endif %}" data-tag="{{ tag }}" style="cursor:pointer;">
+                  {{ tag }}
+                </span>
+                {% endfor %}
+              </div>
+              {% if tags|length > 8 %}
+              <button type="button" class="btn btn-sm btn-link p-0 ms-2 toggle-tags" data-group="{{ group_name }}">展开</button>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}{% endif %}
+      </div>
+    </div>
+    
+    <div id="search-results">
+      {% if results.folders or results.posts or results.uploads or results.questions or results.api or results.users %}
+          {% if results.posts %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-file-text-line me-1"></i>帖子 ({{ results.posts|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.posts %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex align-items-center mb-2">
+                  <a href="{% url 'user_profile' item.post.user.id|encrypt_id %}" class="user-avatar-link">
+                    <img src="{{ item.post.user.profile.get_avatar_url }}" alt="" class="rounded-circle me-2" style="width:32px;height:32px;">
+                  </a>
+                  <div>
+                    <strong>{{ item.post.user.username }}</strong>
+                    <small class="text-muted ms-2">{{ item.post.created_at|date:"Y-m-d H:i" }}</small>
+                  </div>
+                </div>
+                <p class="mb-1">{{ item.post.content|truncatewords:30 }}</p>
+                {% if item.post.image %}
+                <img src="{{ item.post.image.url }}" alt="" class="img-thumbnail mb-2" style="max-height:150px;">
+                {% endif %}
+                {% if item.post.link_url %}
+                <div><a href="{{ item.post.link_url }}" target="_blank" class="text-primary"><i class="ri ri-link"></i> {{ item.post.link_url|truncatechars:50 }}</a></div>
+                {% endif %}
+                <div class="mt-2">
+                  <a href="{% url 'post_detail' item.post.id|encrypt_id %}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if results.folders %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-folder-3-fill text-warning me-1"></i>共享文件夹 ({{ results.folders|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.folders %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex align-items-center mb-2">
+                  <a href="{% url 'user_profile' item.user.id|encrypt_id %}" class="user-avatar-link">
+                    <img src="{{ item.profile.get_avatar_url }}" alt="" class="rounded-circle me-2" style="width:32px;height:32px;">
+                  </a>
+                  <div>
+                    <strong>{{ item.user.username }}</strong>
+                    {% if item.profile.school %}
+                    <small class="text-muted ms-2">{{ item.profile.school }}</small>
+                    {% endif %}
+                  </div>
+                </div>
+                <h6><i class="ri ri-folder-3-fill text-warning me-1"></i>{{ item.folder_name }}</h6>
+                {% if item.description %}
+                <p class="text-muted small mb-1">{{ item.description|truncatewords:20 }}</p>
+                {% endif %}
+                <div class="text-muted small mb-2">
+                  <span><i class="ri ri-file-list-3-line me-1"></i>包含 {{ item.file_count }} 个文件</span>
+                </div>
+                <div>
+                  <a href="{% url 'browse_folder' item.folder_path %}" class="btn btn-sm btn-outline-warning">打开文件夹</a>
+                  <button class="btn btn-sm btn-outline-primary download-folder" data-folder="{{ item.folder_path }}"><i class="ri ri-download-line"></i> 下载文件夹</button>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if results.uploads %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-folder-upload-line me-1"></i>用户分享文件 ({{ results.uploads|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.uploads %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex align-items-center mb-2">
+                  <a href="{% url 'user_profile' item.upload.user.id|encrypt_id %}" class="user-avatar-link">
+                    <img src="{{ item.upload.user.profile.get_avatar_url }}" alt="" class="rounded-circle me-2" style="width:32px;height:32px;">
+                  </a>
+                  <div>
+                    <strong>{{ item.upload.user.username }}</strong>
+                    {% if item.upload.user.profile.school %}
+                    <small class="text-muted ms-2">{{ item.upload.user.profile.school }}</small>
+                    {% endif %}
+                    {% if item.subject %}
+                    <span class="badge bg-info ms-2">{{ item.subject }}</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <h6><i class="ri ri-file-text-line me-1"></i>{{ item.upload.file_name }}</h6>
+                <p class="text-muted small mb-1">{{ item.upload.description|truncatewords:20 }}</p>
+                <div class="text-muted small mb-2">
+                  <span class="me-3"><i class="ri ri-heart-line me-1"></i>{{ item.upload.likes.count }}</span>
+                  <span class="me-3"><i class="ri ri-star-line me-1"></i>{{ item.upload.favorited_by.count }}</span>
+                  <span><i class="ri ri-file-list-3-line me-1"></i>{{ item.upload.total_questions }}题</span>
+                </div>
+                <div>
+                  <a href="{% url 'comment_page' item.upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                  <a href="{% url 'download_upload' item.upload.id|encrypt_id %}" class="btn btn-sm btn-outline-secondary"><i class="ri ri-download-line"></i> 下载 <small>{{ item.upload.download_count }}</small></a>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if results.questions %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-brain-line me-1"></i>题目 ({{ results.questions|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.questions %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div>
+                    <span class="badge bg-info me-2">{{ item.question.question_type }}</span>
+                  </div>
+                  <div class="d-flex align-items-center">
+                    <small class="text-muted me-2">{{ item.question.upload.file_name }}</small>
+                    <button class="btn btn-sm btn-link p-0 favorite-question" data-question-id="{{ item.question.id }}">
+                      <i class="ri {% if item.is_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %}"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="math-content math-lazy mb-2" style="white-space:pre-wrap;line-height:1.8;">{{ item.question.content|render_content|safe }}</div>
+                {% if item.tags_list %}
+                <div class="mb-2">
+                  {% for tag in item.tags_list %}
+                  <span class="badge bg-info text-white me-1">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+                <div><small class="text-muted">答案：</small><span class="math-content math-lazy" style="white-space:pre-wrap;">{{ item.question.answer|render_content|safe }}</span></div>
+                <div class="mt-2">
+                  <a href="{% url 'comment_page' item.question.upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary">查看题库</a>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if results.api %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-code-line text-success me-1"></i>API 实例 ({{ results.api|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.api %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex align-items-center mb-2">
+                  <a href="{% url 'user_profile' item.user.id|encrypt_id %}" class="user-avatar-link">
+                    <img src="{{ item.profile.get_avatar_url }}" alt="" class="rounded-circle me-2" style="width:32px;height:32px;">
+                  </a>
+                  <div>
+                    <strong>{{ item.user.username }}</strong>
+                    {% if item.profile.school %}
+                    <small class="text-muted ms-2">{{ item.profile.school }}</small>
+                    {% endif %}
+                  </div>
+                </div>
+                <h6><i class="ri ri-code-line text-success me-1"></i>{{ item.instance.name }}
+                  {% if item.instance.is_active %}
+                  <span class="badge bg-success">启用</span>
+                  {% else %}
+                  <span class="badge bg-secondary">停用</span>
+                  {% endif %}
+                </h6>
+                <div class="mb-1">
+                  <small class="text-muted">API Key：</small>
+                  <code style="font-size:0.8rem;user-select:all;">{{ item.instance.api_key }}</code>
+                </div>
+                <small class="text-muted d-block mb-2">创建时间：{{ item.instance.created_at|date:'Y-m-d H:i' }}</small>
+                <div>
+                  <a href="/api_instance/{{ item.instance.id }}/" class="btn btn-sm btn-outline-success">详细</a>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if results.users %}
+          <div class="card mb-4">
+            <div class="card-header">
+              <h5 class="mb-0"><i class="ri ri-user-line me-1"></i>用户 ({{ results.users|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+              {% for item in results.users %}
+              <div class="p-3 border-bottom">
+                <div class="d-flex align-items-center">
+                  <a href="{% url 'user_profile' item.profile.user.id|encrypt_id %}" class="user-avatar-link">
+                    <img src="{{ item.profile.get_avatar_url }}" alt="" class="rounded-circle me-3" style="width:48px;height:48px;">
+                  </a>
+                  <div>
+                    <h6 class="mb-0">{{ item.profile.user.username }}</h6>
+                    {% if item.profile.school %}
+                    <small class="text-muted">{{ item.profile.school }}</small>
+                    {% endif %}
+                  </div>
+                  <a href="{% url 'user_profile' item.profile.user.id|encrypt_id %}" class="btn btn-sm btn-outline-primary ms-auto">查看主页</a>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        {% elif not keyword %}
+        <div class="alert alert-secondary text-center">
+          <i class="ri ri-search-line me-2"></i>输入关键词开始搜索
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center">
+          <i class="ri ri-information-line me-2"></i>没有查询到结果
+        </div>
+        {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+$(function() {
+  $(document).on('click', '.favorite-question', function() {
+    var button = $(this);
+    var questionId = button.data('question-id');
+    var icon = button.find('i');
+    
+    $.ajax({
+      url: '/favorite_question/',
+      method: 'POST',
+      data: {
+        question_id: questionId,
+        csrfmiddlewaretoken: '{{ csrf_token }}'
+      },
+      success: function(resp) {
+        if (resp.success) {
+          if (resp.action === 'added') {
+            icon.removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+          } else {
+            icon.removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+          }
+        }
+      }
+    });
+  });
+  
+  // 类型选择变化时显示/隐藏学科下拉框
+  $('#search-type').on('change', function() {
+    var type = $(this).val();
+    var subjectContainer = $('#subject-container');
+    
+    if (type === 'all' || type === 'file' || type === 'question') {
+      subjectContainer.show();
+    } else {
+      subjectContainer.hide();
+      $('#search-subject').val('');
+    }
+  });
+  
+  $(document).on('click', '.tag-item', function() {
+    var tag = $(this).data('tag');
+    var selectedTags = [];
+    $('.tag-item.bg-danger').each(function() {
+      selectedTags.push($(this).data('tag'));
+    });
+    
+    if ($(this).hasClass('bg-danger')) {
+      selectedTags = selectedTags.filter(function(t) { return t !== tag; });
+    } else {
+      selectedTags.push(tag);
+    }
+    
+    var url = new URL(window.location.href);
+    // 移除所有现有的tags参数
+    url.searchParams.delete('tags');
+    // 添加多个tags参数（每个标签一个）
+    selectedTags.forEach(function(t) {
+      url.searchParams.append('tags', t);
+    });
+    window.location.href = url.toString();
+  });
+  
+  $(document).on('click', '.toggle-tags', function() {
+    var btn = $(this);
+    var group = btn.data('group');
+    var container = $('.tag-group[data-group="' + group + '"]');
+    var tags = container.find('.badge');
+    
+    if (btn.text() === '展开') {
+      tags.show();
+      btn.text('收起');
+    } else {
+      tags.slice(6).hide();
+      btn.text('展开');
+    }
+  });
+  
+  $('.tag-group').each(function() {
+    var container = $(this);
+    var tags = container.find('.badge');
+    if (tags.length > 8) {
+      tags.slice(6).hide();
+    }
+  });
+  
+  $(document).on('click', '.remove-tag', function(e) {
+    e.stopPropagation();
+    var tag = $(this).closest('.tag-item').data('tag');
+    var selectedTags = [];
+    $('.tag-item.bg-primary').each(function() {
+      var t = $(this).data('tag');
+      if (t !== tag) selectedTags.push(t);
+    });
+    
+    var url = new URL(window.location.href);
+    if (selectedTags.length > 0) {
+      url.searchParams.set('tags', selectedTags.join(','));
+    } else {
+      url.searchParams.delete('tags');
+    }
+    window.location.href = url.toString();
+  });
+});
+</script>
+{% endblock %}

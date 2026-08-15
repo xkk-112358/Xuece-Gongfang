@@ -1,0 +1,103 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+
+{% block title %}通知详情 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="mb-3">
+    <a href="{% url 'my' %}" class="text-decoration-none">&larr; 返回通知列表</a>
+  </div>
+
+  {% if error %}
+  <div class="card shadow-sm">
+    <div class="card-body text-center py-8">
+      <i class="icon-base ri ri-error-warning-line text-4xl text-gray-300 mb-4 d-block"></i>
+      <p class="text-gray-500">{{ error }}</p>
+      <a href="{% url 'my' %}" class="btn btn-primary">返回个人中心</a>
+    </div>
+  </div>
+  {% else %}
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">{{ notification.title }}</h5>
+      <small class="text-muted">{{ notification.created_at|date:"Y-m-d H:i" }}</small>
+    </div>
+    <div class="card-body">
+      <div class="mb-4" style="word-break:break-all;line-height:1.8;">
+        {{ content_html|safe }}
+      </div>
+    </div>
+  </div>
+
+  {% if is_sent %}
+  <!-- 我发出的通知：撤回 -->
+  <div class="card shadow-sm">
+    <div class="card-body text-center">
+      <button type="button" class="btn btn-outline-warning" onclick="revokeNotification('{{ notification_id }}')">
+        <i class="ri ri-arrow-go-back-line me-1"></i>撤回该通知
+      </button>
+    </div>
+  </div>
+  {% else %}
+  <!-- 我收到的通知：回复 -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h6 class="mb-0">回复</h6>
+    </div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">{% if sender_info %}回复给 <strong>{{ sender_info.username }}</strong>{% else %}回复给管理员{% endif %}</label>
+          <textarea name="reply_content" class="form-control" rows="4" placeholder="请输入回复内容..." style="resize:vertical;"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">截图（可选）</label>
+          <input type="file" class="form-control" name="reply_image" accept="image/*">
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <i class="ri ri-send-plane-line me-1"></i>发送回复
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body text-center">
+      <form method="post" action="{% url 'delete_notification_page' notification_id %}" onsubmit="return confirm('确定删除该通知吗？')" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger">
+          <i class="ri ri-delete-bin-line me-1"></i>删除该通知
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock content %}
+
+{% block page_js %}
+<script>
+function revokeNotification(encryptedId) {
+  if (!confirm('确定撤回该通知吗？对方将看不到此通知。')) return;
+  fetch('/revoke_notification/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({notification_id: encryptedId})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      alert('已撤回');
+      window.location.href = '{% url "my" %}';
+    } else {
+      alert('撤回失败：' + d.message);
+    }
+  })
+  .catch(function() { alert('撤回失败'); });
+}
+</script>
+{% endblock page_js %}

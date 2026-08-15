@@ -1,0 +1,332 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+{% block title %}AI 解析 - 第{{ q.question_number }}题{% endblock %}
+{% block page_css %}
+<style>
+/* 防止页面超出视口出现多余空白 */
+.content-footer { display: none !important; }
+.container-p-y { padding-top: 0 !important; padding-bottom: 0 !important; }
+.content-wrapper { min-height: 100vh !important; padding-top: 0 !important; }
+.layout-page, .content-wrapper, .container-xxl { overflow: hidden; }
+html, body { height: 100%; overflow: hidden; }
+.container-xxl { padding-top: 0 !important; }
+</style>
+{% endblock %}
+{% block page_js %}
+{{ block.super }}
+<style>
+:root {
+  --chat-bg: #f0f2f5;
+  --card-bg: #ffffff;
+  --user-msg-bg: #dbeafe;
+  --ai-msg-bg: #ffffff;
+  --border-color: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+}
+.chat-page { display: flex; flex-direction: column; height: calc(100vh - 56px); max-width: 1200px; margin: -42px auto 0; border: 2px solid #d1d5db; border-radius: 0.75rem; background: var(--card-bg); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.chat-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); border-radius: 0; flex-shrink: 0; }
+.chat-header-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.chat-header-sub { font-size: 0.8rem; color: var(--text-secondary); }
+.chat-messages { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; background: var(--chat-bg); }
+.chat-input-area { flex-shrink: 0; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); background: var(--card-bg); border-radius: 0; }
+.msg-group { margin-bottom: 1.5rem; }
+.msg { display: flex; margin-bottom: 0.75rem; }
+.msg-ai { justify-content: flex-start; }
+.msg-user { justify-content: flex-end; }
+.msg-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; margin-top: 4px; }
+.msg-ai .msg-avatar { background: #e0e7ff; margin-right: 0.75rem; overflow: hidden; }
+.msg-user .msg-avatar { background: #3b82f6; color: #fff; margin-left: 0.75rem; order: 1; }
+.ai-avatar-svg { display: block; }
+.msg-bubble { max-width: 80%; padding: 0.5rem 0.75rem; border-radius: 0.75rem; line-height: 1.6; font-size: 0.85rem; }
+.msg-bubble p { margin: 0 0 0.25rem 0; }
+.msg-bubble p:last-child { margin: 0; }
+.msg-bubble br { display: none; }
+.msg-ai .msg-bubble { background: var(--ai-msg-bg); border: 1px solid var(--border-color); border-top-left-radius: 4px; color: var(--text-primary); }
+.msg-user .msg-bubble { background: var(--user-msg-bg); border: 1px solid transparent; border-top-right-radius: 4px; color: var(--text-primary); }
+.msg-bubble .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+.msg-bubble .katex { font-size: 0.95em; }
+.msg-body { display: flex; flex-direction: column; min-width: 0; max-width: 80%; }
+.msg-ai .msg-body { align-items: flex-start; }
+.msg-user .msg-body { align-items: flex-end; }
+.msg-body .msg-bubble { max-width: 100%; }
+.msg-actions { display: flex; gap: 2px; margin-top: 4px; padding-left: 4px; }
+.msg-actions button { background: none; border: none; padding: 2px 6px; cursor: pointer; color: var(--text-secondary); font-size: 0.85rem; line-height: 1; border-radius: 4px; }
+.msg-actions button:hover { background: rgba(0,0,0,0.06); color: var(--text-primary); }
+.question-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1rem; flex-shrink: 0; }
+.question-card .q-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.question-card .q-content { white-space: pre-wrap; line-height: 1.8; color: var(--text-primary); }
+.question-card .q-answer { margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: #f9fafb; border-radius: 0.5rem; font-size: 0.9rem; }
+.typing-indicator { display: none; padding: 0.5rem 1rem; color: var(--text-secondary); font-style: italic; font-size: 0.9rem; }
+.typing-indicator.active { display: block; }
+.typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; }
+.typing-dots span { width: 6px; height: 6px; background: var(--text-secondary); border-radius: 50%; display: inline-block; animation: pulse 1.2s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%,80%,100% { opacity: 0.3; } 40% { opacity: 1; } }
+.empty-history { text-align: center; padding: 2rem; color: var(--text-secondary); }
+#chatForm .form-control:focus { box-shadow: 0 0 0 2px rgba(59,130,246,0.2); border-color: var(--accent); }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var questionId = {{ q.id }};
+  var chatBox = document.getElementById('chatMessages');
+  var form = document.getElementById('chatForm');
+  var input = document.getElementById('userInput');
+  var typing = document.getElementById('typing');
+  var hasHistory = {{ chat_history|length }} > 0;
+
+  // 渲染所有公式（兼容所有元素位置，强制覆盖已标记元素）
+  function renderAllMath() {
+    if (!window.renderMathNow) {
+      setTimeout(renderAllMath, 300);
+      return;
+    }
+    var els = document.querySelectorAll('.q-content, .q-answer, .msg-bubble');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      // 清除 IntersectionObserver 可能设置的标记，强制重新渲染
+      el.dataset.katexRendered = '';
+      window.renderMathNow(el);
+    }
+  }
+
+  setTimeout(renderAllMath, 500);
+
+  // 收起/展开题目卡片
+  window.toggleQuestionCard = function() {
+    var body = document.getElementById('questionCardBody');
+    var icon = document.getElementById('questionCardToggleIcon');
+    if (body.style.display === 'none') {
+      body.style.display = '';
+      icon.className = 'ri ri-arrow-up-s-line';
+      document.getElementById('toggleQuestionBtn').title = '收起题目';
+    } else {
+      body.style.display = 'none';
+      icon.className = 'ri ri-arrow-down-s-line';
+      document.getElementById('toggleQuestionBtn').title = '展开题目';
+    }
+  };
+
+  // 添加消息（用户消息或错误消息，全量内容）
+  function addMessage(role, content, msgId) {
+    var div = document.createElement('div');
+    div.className = 'msg msg-' + role;
+    if (msgId) div.dataset.msgId = msgId;
+    var avatarHtml = role === 'ai'
+      ? '<svg class="ai-avatar-svg" width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#e0e7ff"/><text x="16" y="20" text-anchor="middle" fill="#4338ca" font-size="13" font-family="sans-serif" font-weight="600">AI</text></svg>'
+      : '👤';
+    var actionsHtml = '<div class="msg-actions">' +
+      '<button class="msg-action-copy" title="复制"><i class="ri ri-file-copy-line"></i></button>' +
+      '<button class="msg-action-regenerate" title="重新生成"><i class="ri ri-refresh-line"></i></button>' +
+      '<button class="msg-action-delete" title="删除"><i class="ri ri-delete-bin-line"></i></button>' +
+      '</div>';
+    div.innerHTML = '<div class="msg-avatar">' + avatarHtml + '</div><div class="msg-body"><div class="msg-bubble math-lazy">' + content + '</div>' + actionsHtml + '</div>';
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    if (window.renderMathNow) {
+      var bubble = div.querySelector('.msg-bubble');
+      if (bubble) { bubble.dataset.katexRendered = ''; window.renderMathNow(bubble); }
+    }
+    return div;
+  }
+
+  var isStreaming = false;
+
+  // 发送消息
+  function sendMessage(userMsg) {
+    if (isStreaming) return;
+    isStreaming = true;
+    typing.classList.add('active');
+    if (userMsg) addMessage('user', userMsg);
+
+    fetch('/question_ai_ask/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+      credentials: 'same-origin',
+      body: JSON.stringify({question_id: questionId, message: userMsg || ''})
+    })
+    .then(function(r) {
+      if (!r.ok) throw new Error('服务器返回状态码: ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      typing.classList.remove('active');
+      isStreaming = false;
+      // 刷新页面，服务端渲染完整的聊天记录（含 KaTeX）
+      location.reload();
+    })
+    .catch(function(err) {
+      typing.classList.remove('active');
+      isStreaming = false;
+      // 出错也刷新，显示错误状态
+      location.reload();
+    });
+  }
+
+  if (!hasHistory) sendMessage('');
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    sendMessage(text);
+  });
+
+  // 操作按钮事件委托
+  chatBox.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    var msgDiv = btn.closest('.msg');
+    if (!msgDiv) return;
+
+    // 复制
+    if (btn.classList.contains('msg-action-copy')) {
+      var bubble = msgDiv.querySelector('.msg-bubble');
+      if (!bubble) return;
+      var text = bubble.textContent || '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.style.color = 'var(--accent)';
+        setTimeout(function(){ btn.style.color = ''; }, 800);
+      });
+      return;
+    }
+
+    // 删除
+    if (btn.classList.contains('msg-action-delete')) {
+      var msgId = msgDiv.dataset.msgId;
+      if (msgId) {
+        fetch('/ai_chat/delete_message/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+          credentials: 'same-origin',
+          body: JSON.stringify({msg_id: msgId})
+        }).catch(function(){});
+      }
+      msgDiv.remove();
+      return;
+    }
+
+    // 重新生成
+    if (btn.classList.contains('msg-action-regenerate')) {
+      var msgId = msgDiv.dataset.msgId;
+      var bubble = msgDiv.querySelector('.msg-bubble');
+      var msgText = bubble ? bubble.textContent || '' : '';
+
+      if (msgDiv.classList.contains('msg-user')) {
+        // 用户消息：删除自身并重新发送
+        if (msgId) {
+          fetch('/ai_chat/delete_message/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            credentials: 'same-origin',
+            body: JSON.stringify({msg_id: msgId})
+          }).catch(function(){});
+        }
+        msgDiv.remove();
+        // 同时删除它后面的 AI 回复（如果有）
+        var next = msgDiv.nextElementSibling;
+        while (next && next.classList.contains('msg-ai')) {
+          var nextId = next.dataset.msgId;
+          if (nextId) {
+            fetch('/ai_chat/delete_message/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+              credentials: 'same-origin',
+              body: JSON.stringify({msg_id: nextId})
+            }).catch(function(){});
+          }
+          next.remove();
+          next = msgDiv.nextElementSibling;
+        }
+        if (msgText) sendMessage(msgText);
+      } else {
+        // AI 消息：删除自身，找到前一条用户消息重新发送
+        var prev = msgDiv.previousElementSibling;
+        while (prev && !prev.classList.contains('msg-user')) {
+          prev = prev.previousElementSibling;
+        }
+        if (msgId) {
+          fetch('/ai_chat/delete_message/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            credentials: 'same-origin',
+            body: JSON.stringify({msg_id: msgId})
+          }).catch(function(){});
+        }
+        msgDiv.remove();
+        if (prev) {
+          var prevBubble = prev.querySelector('.msg-bubble');
+          var prevText = prevBubble ? prevBubble.textContent || '' : '';
+          if (prevText) sendMessage(prevText);
+        } else {
+          sendMessage('');
+        }
+      }
+      return;
+    }
+  });
+
+});
+</script>
+{% endblock %}
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+  <div class="chat-page">
+    <!-- 题目卡片（可收起） -->
+    <div class="question-card">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <span class="q-label">第 {{ q.question_number }} 题（{{ q.question_type }}）</span>
+        <div>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleQuestionBtn" style="border:0;color:var(--text-secondary);" title="收起题目" onclick="window.toggleQuestionCard()">
+            <i class="ri ri-arrow-up-s-line" id="questionCardToggleIcon"></i>
+          </button>
+          <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary" style="border:0;color:var(--text-secondary);">&larr; 返回</a>
+        </div>
+      </div>
+      <div id="questionCardBody">
+        <div class="q-content math-content math-lazy">{{ q.content|render_content|safe }}</div>
+        {% if q.answer %}
+        <div class="q-answer math-content math-lazy"><strong>答案：</strong><span style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 聊天区域 -->
+    <div class="chat-messages" id="chatMessages">
+      {% if chat_history|length > 0 %}
+        {% for msg in chat_history %}
+        <div class="msg msg-{{ msg.role }}" data-msg-id="{{ msg.id }}">
+          <div class="msg-avatar">{% if msg.role == 'ai' %}<svg class="ai-avatar-svg" width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#e0e7ff"/><text x="16" y="20" text-anchor="middle" fill="#4338ca" font-size="13" font-family="sans-serif" font-weight="600">AI</text></svg>{% else %}👤{% endif %}</div>
+          <div class="msg-body">
+            <div class="msg-bubble math-lazy">{{ msg.content|render_markdown|safe }}</div>
+            <div class="msg-actions">
+              <button class="msg-action-copy" title="复制"><i class="ri ri-file-copy-line"></i></button>
+              <button class="msg-action-regenerate" title="重新生成"><i class="ri ri-refresh-line"></i></button>
+              <button class="msg-action-delete" title="删除"><i class="ri ri-delete-bin-line"></i></button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+      <div class="typing-indicator" id="typing">
+        AI 正在思考<span class="typing-dots"><span></span><span></span><span></span></span>
+      </div>
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="chat-input-area">
+      <form id="chatForm">
+        <div class="input-group">
+          <input type="text" class="form-control" id="userInput" placeholder="输入你的问题..." autocomplete="off" style="border-radius:0.5rem 0 0 0.5rem;">
+          <button class="btn btn-primary" type="submit" style="border-radius:0 0.5rem 0.5rem 0;padding:0.375rem 1.25rem;">发送</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

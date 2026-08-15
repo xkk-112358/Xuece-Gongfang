@@ -1,0 +1,1897 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}账户设置{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // 修改密码 - 点击按钮显示输入框
+  var btnShowChangePwd = document.getElementById('btnShowChangePassword');
+  var changePwdFields = document.getElementById('changePasswordFields');
+  var newPwdInput = document.getElementById('newPassword');
+  var confirmPwdInput = document.getElementById('confirmPassword');
+  if (btnShowChangePwd) {
+    btnShowChangePwd.addEventListener('click', function() {
+      newPwdInput.value = '';
+      confirmPwdInput.value = '';
+      changePwdFields.style.display = 'block';
+      btnShowChangePwd.style.display = 'none';
+      newPwdInput.focus();
+    });
+  }
+
+  function checkAndCloseChangePassword() {
+    if (newPwdInput.value === '' && confirmPwdInput.value === '') {
+      changePwdFields.style.display = 'none';
+      btnShowChangePwd.style.display = 'inline-block';
+    }
+  }
+
+  if (newPwdInput) {
+    newPwdInput.addEventListener('blur', function() {
+      setTimeout(checkAndCloseChangePassword, 150);
+    });
+  }
+  if (confirmPwdInput) {
+    confirmPwdInput.addEventListener('blur', function() {
+      setTimeout(checkAndCloseChangePassword, 150);
+    });
+  }
+
+  // 修改密码表单验证
+  var formChangePwd = document.getElementById('formChangePassword');
+  if (formChangePwd) {
+    formChangePwd.addEventListener('submit', function(e) {
+      var newPwd = document.getElementById('newPassword').value;
+      var confirmPwd = document.getElementById('confirmPassword').value;
+      if (newPwd !== confirmPwd) {
+        e.preventDefault();
+        alert('两次输入的密码不一致，请重新输入');
+        return false;
+      }
+    });
+  }
+
+  // 删除账户 - 验证密码和确认声明
+  var confirmDeleteBtn = document.getElementById('confirmDelete');
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', function() {
+      var pwd1 = document.getElementById('deletePassword1').value;
+      var pwd2 = document.getElementById('deletePassword2').value;
+      var confirmText = document.getElementById('deleteConfirmText').value.trim();
+
+      if (!pwd1 || !pwd2) {
+        alert('请输入密码');
+        return;
+      }
+      if (pwd1 !== pwd2) {
+        alert('两次输入的密码不一致，请重新输入');
+        return;
+      }
+      if (confirmText !== '我已知悉删除账户的所有影响，所有风险自行承担。') {
+        alert('确认声明不匹配，请准确输入');
+        return;
+      }
+      document.getElementById('formDeleteAccount').submit();
+    });
+  }
+
+  // 删除账户模态框打开时强制清空输入
+  var deleteModal = document.getElementById('deleteAccountModal');
+  if (deleteModal) {
+    deleteModal.addEventListener('show.bs.modal', function() {
+      document.getElementById('deletePassword1').value = '';
+      document.getElementById('deletePassword2').value = '';
+      document.getElementById('deleteConfirmText').value = '';
+    });
+    deleteModal.addEventListener('hidden.bs.modal', function() {
+      document.getElementById('deletePassword1').value = '';
+      document.getElementById('deletePassword2').value = '';
+      document.getElementById('deleteConfirmText').value = '';
+    });
+  }
+  
+  var btnCancelDelete = document.getElementById('btnCancelDelete');
+  if (btnCancelDelete) {
+    btnCancelDelete.addEventListener('click', function() {
+      document.getElementById('deletePassword1').value = '';
+      document.getElementById('deletePassword2').value = '';
+      document.getElementById('deleteConfirmText').value = '';
+    });
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  // 提取题目
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (target.classList.contains('extract-questions')) {
+      e.preventDefault();
+      var uploadId = target.dataset.uploadId;
+      var fileName = target.dataset.fileName || '该文件';
+      var btn = target;
+      btn.disabled = true;
+      btn.textContent = '处理中... (0%)';
+      btn.classList.remove('btn-outline-success', 'btn-outline-warning');
+      btn.classList.add('btn-outline-info');
+      var formData = new FormData();
+      formData.append('upload_id', uploadId);
+      formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+      fetch('/extract_questions/', { method: 'POST', body: formData })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+          if (data.success) {
+            var pollInterval = setInterval(function() {
+              fetch('/get_upload_progress/?upload_id=' + encodeURIComponent(uploadId))
+                .then(function(r) { return r.json(); })
+                .then(function(progressData) {
+                  if (progressData.success) {
+                    var progress = progressData.progress;
+                    btn.textContent = '处理中... (' + progress + '%)';
+                    if (progressData.status === 'completed') {
+                      clearInterval(pollInterval);
+                      btn.textContent = '已完成';
+                      btn.classList.remove('btn-outline-info');
+                      btn.classList.add('btn-outline-success');
+                      setTimeout(function() { location.reload(); }, 500);
+                    } else if (progressData.status === 'error' || progressData.error) {
+                      clearInterval(pollInterval);
+                      alert('处理失败: ' + (progressData.error || '未知错误'));
+                      btn.disabled = false;
+                      btn.textContent = '重新提取';
+                      btn.classList.remove('btn-outline-info');
+                      btn.classList.add('btn-outline-warning');
+                    }
+                  }
+                }).catch(function(err) {});
+            }, 1000);
+          } else {
+            alert('操作失败: ' + data.message);
+            btn.disabled = false;
+            btn.textContent = '重新提取';
+            btn.classList.remove('btn-outline-info');
+            btn.classList.add('btn-outline-warning');
+          }
+        })
+        .catch(function(err) {
+          alert('请求失败: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = '重新提取';
+          btn.classList.remove('btn-outline-info');
+          btn.classList.add('btn-outline-warning');
+        });
+    }
+  });
+});
+
+// 通知数据（从服务器端JSON注入）
+var _notifData = {{ notifications_json|safe }};
+var _notifMap = {};
+_notifData.forEach(function(n) { _notifMap[n.id] = n; });
+
+// 通知：删除
+function deleteNotification(btn) {
+  if (!confirm('确定删除该通知吗？')) return;
+  var item = btn.closest('[data-notif-id]');
+  if (!item) return;
+  var id = parseInt(item.getAttribute('data-notif-id'));
+  fetch('/delete_notification/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({notification_id: id})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      delete _notifMap[id];
+      item.remove();
+    } else {
+      alert('删除失败：' + d.message);
+    }
+  })
+  .catch(function() { alert('删除失败'); });
+}
+
+// 管理员：发送通知
+var _allUserCheckboxes = null;
+function toggleSelectAllUsers() {
+  var cbs = document.querySelectorAll('#subtab-content-notif-sent .user-checkbox');
+  var allChecked = true;
+  cbs.forEach(function(cb) { if (!cb.checked) allChecked = false; });
+  cbs.forEach(function(cb) { cb.checked = !allChecked; });
+  updateSelectedUserCount();
+}
+
+function updateSelectedUserCount() {
+  var cbs = document.querySelectorAll('#subtab-content-notif-sent .user-checkbox:checked');
+  document.getElementById('selectedUserCount').textContent = '已选 ' + cbs.length + ' 人';
+}
+
+function revokeNotification(btn) {
+  if (!confirm('确定撤回该通知吗？对方将看不到此通知。')) return;
+  var item = btn.closest('[data-sent-notif-id]');
+  var encryptedId = item.getAttribute('data-sent-notif-id');
+  
+  fetch('/revoke_notification/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({notification_id: encryptedId})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      item.remove();
+    } else {
+      alert('撤回失败：' + d.message);
+    }
+  })
+  .catch(function() { alert('撤回失败'); });
+}
+
+function deleteSentNotification(btn) {
+  if (!confirm('确定删除该通知吗？（仅在您的列表中删除）')) return;
+  var item = btn.closest('[data-sent-notif-id]');
+  if (!item) return;
+  var encryptedId = item.getAttribute('data-sent-notif-id');
+  // 用现有的 delete_notification 接口（已支持sender删除）
+  fetch('/delete_notification/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({notification_id: encryptedId})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      item.remove();
+    } else {
+      alert('删除失败：' + d.message);
+    }
+  })
+  .catch(function() { alert('删除失败'); });
+}
+
+// 监听发布通知中的复选框变化
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('user-checkbox')) {
+    updateSelectedUserCount();
+  }
+});
+
+function sendNotification(btn) {
+  var cbs = document.querySelectorAll('#subtab-content-notif-sent .user-checkbox:checked');
+  var title = document.getElementById('notifTitle').value.trim();
+  var content = document.getElementById('notifContent').value.trim();
+  var imageUrl = document.getElementById('notifImageUrl').value.trim();
+  var resultDiv = document.getElementById('sendNotifResult');
+
+  if (!cbs.length) { resultDiv.innerHTML = '<div class="text-danger small">请选择接收用户</div>'; return; }
+  if (!title) { resultDiv.innerHTML = '<div class="text-danger small">请输入通知标题</div>'; return; }
+  if (!content) { resultDiv.innerHTML = '<div class="text-danger small">请输入通知内容</div>'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ri ri-loader-4-line ri-spin me-1"></i>发送中...';
+  resultDiv.innerHTML = '';
+
+  var user_ids = [];
+  cbs.forEach(function(cb) { user_ids.push(parseInt(cb.value)); });
+  
+  var finalContent = content;
+  if (imageUrl) finalContent += '\n\n' + imageUrl;
+
+  fetch('/admin_send_notification/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({user_ids: user_ids, title: title, content: finalContent})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri ri-send-plane-line me-1"></i>发送通知';
+    if (d.success) {
+      resultDiv.innerHTML = '<div class="text-success small"><i class="ri ri-check-line"></i> ' + d.message + '</div>';
+      document.getElementById('notifTitle').value = '';
+      document.getElementById('notifContent').value = '';
+      document.getElementById('notifImageUrl').value = '';
+      cbs.forEach(function(cb) { cb.checked = false; });
+      updateSelectedUserCount();
+    } else {
+      resultDiv.innerHTML = '<div class="text-danger small">' + d.message + '</div>';
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri ri-send-plane-line me-1"></i>发送通知';
+    resultDiv.innerHTML = '<div class="text-danger small">发送失败</div>';
+  });
+}
+</script>
+<style>
+  /* 长数学公式横向滚动，不溢出容器 */
+  .katex {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+  }
+</style>
+<style>
+  /* 学科选择器样式 */
+  .subject-combobox {
+    position: relative;
+    width: 100%;
+  }
+  
+  .subject-combobox .subject-input {
+    width: 100%;
+    border-radius: 0.375rem;
+  }
+  
+  .subject-combobox .subject-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    min-width: 100%;
+    margin-top: 0;
+    border-radius: 0 0 0.375rem 0.375rem;
+    display: none;
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-top: none;
+    background: #fff;
+    list-style: none;
+    padding: 0.5rem 0;
+  }
+  
+  .subject-combobox .subject-dropdown-menu.show {
+    display: block !important;
+  }
+  
+  .subject-combobox .subject-dropdown-menu li {
+    padding: 0;
+  }
+  
+  .subject-combobox .subject-dropdown-menu .dropdown-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    color: #333;
+    text-decoration: none;
+    display: block;
+  }
+  
+  .subject-combobox .subject-dropdown-menu .dropdown-item:hover {
+    background-color: #f0f0f0;
+  }
+  
+  .subject-combobox .subject-custom-input {
+    width: 100%;
+    border-radius: 0.375rem;
+  }
+</style>
+<script>
+// 所有文件夹操作代码
+document.addEventListener('DOMContentLoaded', function() {
+    // 恢复滚动位置
+    var scrollPosition = sessionStorage.getItem('scrollPosition');
+    if (scrollPosition !== null) {
+        window.scrollTo(0, parseInt(scrollPosition));
+        sessionStorage.removeItem('scrollPosition');
+    }
+    
+    // URL参数激活对应标签页
+    var params = new URLSearchParams(window.location.search);
+    var tabParam = params.get('tab');
+    if (tabParam) {
+        var tabEl = document.getElementById('tab-' + tabParam);
+        if (tabEl) {
+            tabEl.click();
+        }
+    }
+
+    // 编辑文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.edit-folder');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var newName = prompt('请输入新的文件夹名称:', folderName);
+            if (newName && newName.trim() && newName !== folderName) {
+                var csrfToken = getCookie('csrftoken');
+                fetch('/rename_folder/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        old_name: folderName,
+                        new_name: newName.trim()
+                    })
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        alert('文件夹重命名成功');
+                        location.reload();
+                    } else {
+                        alert('重命名失败: ' + data.message);
+                    }
+                }).catch(function(error) {
+                    alert('重命名失败，请重试');
+                });
+            }
+        }
+    });
+
+    // 下载文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.download-folder');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/download_folder/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    folder_name: folderName
+                })
+            }).then(function(response) {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(function(data) {
+                        throw new Error(data.message || '下载失败');
+                    });
+                }
+            }).then(function(blob) {
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = folderName + '.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }).catch(function(error) {
+                alert('下载失败: ' + error.message);
+            });
+        }
+    });
+
+    // 删除文件夹
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.delete-folder-btn');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            if (confirm('确定要删除文件夹 "' + folderName + '" 及其所有内容吗？此操作不可撤销！')) {
+                var csrfToken = getCookie('csrftoken');
+                fetch('/delete_folder/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        folder_name: folderName
+                    })
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (data.success) {
+                        alert('文件夹删除成功');
+                        location.reload();
+                    } else {
+                        alert('删除失败: ' + data.message);
+                    }
+                }).catch(function(error) {
+                    alert('删除失败，请重试');
+                });
+            }
+        }
+    });
+
+    // 切换文件夹共享状态
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.toggle-folder-share');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/toggle_folder_share/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    folder_name: folderName
+                })
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    if (data.is_shared) {
+                        target.textContent = '是';
+                        target.classList.remove('btn-secondary');
+                        target.classList.add('btn-success');
+                    } else {
+                        target.textContent = '否';
+                        target.classList.remove('btn-success');
+                        target.classList.add('btn-secondary');
+                    }
+                } else {
+                    alert('操作失败: ' + data.message);
+                }
+            }).catch(function(error) {
+                alert('操作失败，请重试');
+            });
+        }
+    });
+
+    // 切换文件夹收藏状态
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.folder-favorite-star');
+        if (target) {
+            e.preventDefault();
+            var folderName = target.getAttribute('data-folder');
+            var csrfToken = getCookie('csrftoken');
+            fetch('/toggle_folder_favorite/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    folder_name: folderName
+                })
+            }).then(function(response) {
+                return response.json();
+            }).then(function(data) {
+                if (data.success) {
+                    if (data.is_favorited) {
+                        target.classList.remove('ri-star-line');
+                        target.classList.add('ri-star-fill', 'text-warning');
+                    } else {
+                        target.classList.remove('ri-star-fill', 'text-warning');
+                        target.classList.add('ri-star-line');
+                    }
+                    // 如果当前显示的是收藏标签页，刷新页面以显示最新收藏
+                    var activeTab = document.querySelector('.nav-link.active');
+                    if (activeTab && activeTab.id === 'tab-favorites') {
+                        location.reload();
+                    }
+                } else {
+                    alert('操作失败: ' + data.message);
+                }
+            }).catch(function(error) {
+                alert('操作失败，请重试');
+            });
+        }
+    });
+
+    // 点击打开文件夹时记录滚动位置
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.open-folder');
+        if (target) {
+            // 记录当前滚动位置
+            sessionStorage.setItem('scrollPosition', window.scrollY);
+        }
+    });
+
+    // 点击通知标签时标记所有通知为已读
+    document.getElementById('tab-notifications').addEventListener('click', function() {
+        var csrfToken = getCookie('csrftoken');
+        fetch('/mark_notifications_read/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({})
+        }).then(function(response) {
+            return response.json();
+        }).then(function(data) {
+            if (data.success) {
+                // 移除通知标签上的红点
+                var badge = document.querySelector('#tab-notifications .badge');
+                if (badge) badge.remove();
+                // 移除侧边栏个人中心的红点
+                var sidebarDots = document.querySelectorAll('.menu-item a[href*=\"/my/\"] .bg-danger.rounded-circle');
+                sidebarDots.forEach(function(el) { el.remove(); });
+                // 移除导航栏头像上的红点
+                var navbarDots = document.querySelectorAll('a.nav-link[href*=\"/my/\"] .bg-danger.rounded-circle');
+                navbarDots.forEach(function(el) { el.remove(); });
+                // 移除_base.html我的链接中的红点
+                var baseBadges = document.querySelectorAll('.notification-badge-base');
+                baseBadges.forEach(function(el) { el.remove(); });
+                // 刷新通知列表样式（去掉背景色和新标签）
+                var items = document.querySelectorAll('#tab-content-notifications .list-group-item');
+                items.forEach(function(item) {
+                    item.classList.remove('bg-light');
+                    var badgeNew = item.querySelector('.badge.bg-primary');
+                    if (badgeNew) badgeNew.remove();
+                });
+            }
+        }).catch(function(error) {
+            console.error('标记已读失败');
+        });
+    });
+});
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock page_js %}
+
+{% block content %}
+<div class="row align-items-start">
+  <div class="col-lg-12">
+    <div class="nav-align-top">
+      <ul class="nav nav-pills flex-column flex-md-row mb-6 gap-2 gap-lg-0">
+        <li class="nav-item">
+          <a class="nav-link active" id="tab-account" data-bs-toggle="tab" href="#tab-content-account"><i class="icon-base ri ri-group-line icon-sm me-1_5"></i>账户</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-notifications" data-bs-toggle="tab" href="#tab-content-notifications"><i class="icon-base ri ri-notification-4-line icon-sm me-1_5"></i>通知{% if unread_notification_count > 0 %} <span class="badge bg-danger rounded-pill" style="font-size:0.6rem;padding:3px 5px;vertical-align:top;">{{ unread_notification_count }}</span>{% endif %}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-uploads" data-bs-toggle="tab" href="#tab-content-uploads"><i class="icon-base ri ri-file-text-line icon-sm me-1_5"></i>题库</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-following" data-bs-toggle="tab" href="#tab-content-following"><i class="icon-base ri ri-user-follow-line icon-sm me-1_5"></i>关注</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-followers" data-bs-toggle="tab" href="#tab-content-followers"><i class="icon-base ri ri-user-heart-line icon-sm me-1_5"></i>粉丝</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-favorites" data-bs-toggle="tab" href="#tab-content-favorites"><i class="icon-base ri ri-star-line icon-sm me-1_5"></i>收藏</a>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <!-- 账户 -->
+        <div class="tab-pane fade show active" id="tab-content-account">
+          <div class="card mb-6">
+            <div class="card-body">
+              <div class="d-flex align-items-start align-items-sm-center gap-6">
+                <img src="{% if profile.avatar %}{{ profile.avatar.url }}{% elif profile.default_avatar %}{% static profile.default_avatar %}{% else %}{% static 'pictures/头像/男生头像 1.jpg' %}{% endif %}" alt="用户头像" class="d-block w-px-100 h-px-100 rounded" id="uploadedAvatar" />
+                <div>
+                  <div class="mb-4">
+                    <span class="me-4">关注 <span class="font-bold text-primary following-count">{{ following_count|default:0 }}</span></span>
+                    <span>粉丝 <span class="font-bold text-primary follower-count">{{ follower_count|default:0 }}</span></span>
+                    {% if age is not None %}
+                    <span class="ms-4" id="age-display">{{ age }}岁</span>
+                    {% else %}
+                    <span class="ms-4 d-none" id="age-display"></span>
+                    {% endif %}
+                  </div>
+                  <div class="button-wrapper">
+                    <label for="upload" class="btn btn-sm btn-primary me-3 mb-4" tabindex="0">
+                      <span class="d-none d-sm-block">上传新照片</span>
+                      <i class="icon-base ri ri-upload-2-line d-block d-sm-none"></i>
+                      <input type="file" id="upload" class="account-file-input" hidden accept="image/png, image/jpeg" />
+                    </label>
+                    <button type="button" class="btn btn-sm btn-outline-primary me-3 mb-4" data-bs-toggle="modal" data-bs-target="#avatarModal">
+                      <i class="icon-base ri ri-image-line d-block d-sm-none"></i>
+                      <span class="d-none d-sm-block">选择头像</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger account-image-reset mb-4">
+                      <i class="icon-base ri ri-refresh-line d-block d-sm-none"></i>
+                      <span class="d-none d-sm-block">重置</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-body pt-0">
+              <form id="formAccountSettings" method="POST">
+                {% csrf_token %}
+                <div class="row mt-1 g-5">
+                  <div class="col-md-12">
+                    <div class="form-floating form-floating-outline">
+                      <input class="form-control" type="text" id="firstName" name="firstName" value="{{ user.username }}" autofocus readonly />
+                      <label for="firstName">昵称</label>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="school" class="form-label">学校</label>
+                    <select id="school" name="school" class="select2 form-select" data-allow-clear="false" disabled>
+                      <option value="">请选择学校</option>
+                      {% if profile.school %}
+                      <option value="{{ profile.school }}" selected>{{ profile.school }}</option>
+                      {% endif %}
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="birthday" class="form-label">生日</label>
+                    <input class="form-control" type="date" id="birthday" name="birthday" value="{{ profile.birthday|date:'Y-m-d' }}" />
+                  </div>
+                </div>
+                <div class="mt-6">
+                  <button type="button" class="btn btn-primary me-3" id="btnSave" disabled>保存更改</button>
+                  <button type="button" class="btn btn-outline-secondary" id="btnEdit">编辑</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="card mt-6">
+            <h5 class="card-header">修改密码</h5>
+            <div class="card-body">
+              <form id="formChangePassword" method="POST" action="{% url 'change_password' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <button type="button" class="btn btn-primary" id="btnShowChangePassword">修改密码</button>
+                </div>
+                <div id="changePasswordFields" style="display:none;">
+                  <div class="row g-4">
+                    <div class="col-md-6">
+                      <label for="newPassword" class="form-label">新密码</label>
+                      <input class="form-control" type="password" id="newPassword" name="new_password" placeholder="8-16位，含大小写字母+数字" required>
+                    </div>
+                    <div class="col-md-6">
+                      <label for="confirmPassword" class="form-label">确认新密码</label>
+                      <input class="form-control" type="password" id="confirmPassword" name="confirm_password" placeholder="请再次输入新密码" required>
+                    </div>
+                  </div>
+                  <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">确认</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="card mt-6">
+            <h5 class="card-header">删除账户</h5>
+            <div class="card-body">
+              <div class="mb-3">
+                <small class="text-muted">一旦删除您的账户，它将永久消失。此操作无法撤销。</small>
+              </div>
+              <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">删除账户</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 通知 -->
+        <div class="tab-pane fade" id="tab-content-notifications">
+          <div class="card">
+            <div class="card-header">
+              <ul class="nav nav-pills card-header-pills">
+                <li class="nav-item">
+                  <a class="nav-link active" id="subtab-notif-received" data-bs-toggle="pill" href="#subtab-content-notif-received">我收到的</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" id="subtab-notif-sent" data-bs-toggle="pill" href="#subtab-content-notif-sent">我发出的</a>
+                </li>
+              </ul>
+            </div>
+            <div class="card-body">
+              <div class="tab-content">
+                <!-- 我收到的 -->
+                <div class="tab-pane fade show active" id="subtab-content-notif-received">
+                  {% if notifications %}
+                  <div class="list-group list-group-flush">
+                    {% for notification in notifications %}
+                    <div class="list-group-item {% if not notification.is_read %}bg-light{% endif %}" data-notif-id="{{ notification.id }}">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                          <h6 class="mb-1">
+                            {% if not notification.is_read %}
+                            <span class="badge bg-primary rounded-pill" style="font-size:0.5rem;vertical-align:middle;">新</span>
+                            {% endif %}
+                            <a href="{% url 'notification_detail' notification.id|encrypt_id %}" class="text-decoration-none text-dark stretched-link">{{ notification.title }}</a>
+                          </h6>
+                          <p class="mb-0 small text-muted" style="white-space:pre-line;max-height:2.6em;overflow:hidden;">{{ notification.content }}</p>
+                          <small class="text-muted">{{ notification.created_at }}</small>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 ms-2 flex-shrink-0" style="position:relative;z-index:2;">
+                          <button type="button" class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();deleteNotification(this)" title="删除">
+                            <i class="ri ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <div class="text-center py-8">
+                    <i class="icon-base ri ri-notification-4-line text-4xl text-gray-300 mb-4 d-block"></i>
+                    <p class="text-gray-500">暂无通知</p>
+                  </div>
+                  {% endif %}
+                </div>
+                <!-- 我发出的 -->
+                <div class="tab-pane fade" id="subtab-content-notif-sent">
+                  {% if user.is_superuser %}
+                  <div class="mb-4 p-3 border rounded bg-light">
+                    <h6 class="mb-3">发布通知</h6>
+                    <form id="formSendNotification">
+                      {% csrf_token %}
+                      <div class="mb-3">
+                        <label class="form-label">接收用户</label>
+                        <div class="mb-2">
+                          <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSelectAllUsers()">全选</button>
+                          <span class="text-muted small ms-2" id="selectedUserCount">已选 0 人</span>
+                        </div>
+                        <div style="max-height:150px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:8px;">
+                          {% for u in all_users %}
+                          <label class="d-inline-block me-3 mb-1" style="width:150px;">
+                            <input type="checkbox" class="user-checkbox" value="{{ u.id }}"> {{ u.username }}
+                          </label>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">通知标题</label>
+                        <input type="text" class="form-control" id="notifTitle" placeholder="请输入通知标题" required>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">通知内容</label>
+                        <textarea class="form-control" id="notifContent" rows="4" placeholder="请输入通知内容..." style="resize:vertical;" required></textarea>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">图片链接（可选）</label>
+                        <input type="url" class="form-control" id="notifImageUrl" placeholder="https://...">
+                      </div>
+                      <button type="button" class="btn btn-primary" onclick="sendNotification(this)">
+                        <i class="ri ri-send-plane-line me-1"></i>发送通知
+                      </button>
+                      <div id="sendNotifResult" class="mt-2"></div>
+                    </form>
+                  </div>
+                  {% endif %}
+                  <h6 class="mb-3">已发出的通知</h6>
+                  {% if sent_notifications %}
+                  <div class="list-group list-group-flush">
+                    {% for n in sent_notifications %}
+                    <div class="list-group-item" data-sent-notif-id="{{ n.encrypted_id }}">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                          <h6 class="mb-1">
+                            <a href="{% url 'notification_detail' n.encrypted_id %}" class="text-decoration-none text-dark stretched-link">{{ n.title }}</a>
+                          </h6>
+                          <p class="mb-0 small text-muted" style="white-space:pre-line;max-height:2.6em;overflow:hidden;">{{ n.content }}</p>
+                          <small class="text-muted">发给 <strong>{{ n.recipient_username }}</strong> · {{ n.created_at }}</small>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 ms-2 flex-shrink-0" style="position:relative;z-index:2;">
+                          <button type="button" class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();deleteSentNotification(this)" title="删除">
+                            <i class="ri ri-delete-bin-line"></i>
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-warning" onclick="event.stopPropagation();revokeNotification(this)" title="撤回（双方都删）">
+                            <i class="ri ri-arrow-go-back-line"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <div class="text-center py-4">
+                    <i class="icon-base ri ri-send-plane-line text-4xl text-gray-300 mb-3 d-block"></i>
+                    <p class="text-gray-500">暂无已发出的通知</p>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 通知详情弹窗（已废弃，保留以防后续使用） -->
+        <div class="modal fade" id="notificationDetailModal" tabindex="-1">
+          <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="notifModalTitle">通知详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <small class="text-muted" id="notifModalTime"></small>
+                </div>
+                <div id="notifModalContent" style="white-space:pre-line;word-break:break-all;"></div>
+              </div>
+              <div class="modal-footer">
+                <div id="notifModalActions" class="d-flex gap-2"></div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 题库 -->
+        <div class="tab-pane fade" id="tab-content-uploads">
+          <div class="card">
+            <ul class="nav nav-pills card-header-pills">
+              <li class="nav-item">
+                <a class="nav-link active" id="subtab-upload" data-bs-toggle="pill" href="#subtab-content-upload">上传文件</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" id="subtab-manage" data-bs-toggle="pill" href="#subtab-content-manage">文件管理</a>
+              </li>
+            </ul>
+            <div class="card-body">
+              <div class="tab-content">
+                <!-- 上传文件 -->
+                <div class="tab-pane fade show active" id="subtab-content-upload">
+                  <form id="formUpload" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                      <div class="d-flex align-items-center mb-2">
+                        <label class="form-label mb-0 me-3">上传模式</label>
+                        <div class="btn-group btn-group-sm" role="group" id="uploadModeToggle">
+                          <button type="button" class="btn btn-outline-primary active" data-mode="file">上传文件</button>
+                          <button type="button" class="btn btn-outline-primary" data-mode="folder">上传文件夹</button>
+                        </div>
+                      </div>
+                      <div class="mb-2" id="uploadModeHint" style="font-size:0.85rem;color:#888;">
+                        <span data-mode="file" class="text-muted"><i class="ri ri-file-line me-1"></i>选择单个或多个文件（.doc/.docx/.pdf/.md）</span>
+                        <span data-mode="folder" class="text-muted d-none"><i class="ri ri-folder-line me-1"></i>选择整个文件夹，将上传其中的文档文件</span>
+                      </div>
+                      <input class="form-control" type="file" id="uploadFile" name="file" accept=".doc,.docx,.pdf,.md" multiple />
+                    </div>
+                    <div class="mb-4">
+                      <label class="form-label" for="fileName">文件名（可选）</label>
+                      <input class="form-control" type="text" id="fileName" name="file_name" placeholder="留空则使用原文件名" />
+                    </div>
+                    <div class="mb-4">
+                      <label class="form-label" for="description">描述（可选）</label>
+                      <textarea class="form-control" id="description" name="description" rows="3" placeholder="请输入文件描述"></textarea>
+                    </div>
+                    <div class="mb-4">
+                      <label class="form-label" for="subject">学科（必填）</label>
+                      <div class="subject-combobox">
+                        <input type="text" class="form-control subject-input" id="subject" name="subject" placeholder="选择或输入学科" autocomplete="off" required>
+                        <ul class="subject-dropdown-menu">
+                          <li><a class="dropdown-item subject-add-new" href="#">没有学科？点我添加</a></li>
+                          <li><hr class="dropdown-divider"></li>
+                          {% for subj in all_subjects %}
+                          <li><a class="dropdown-item subject-item" href="#" data-value="{{ subj }}">{{ subj }}</a></li>
+                          {% endfor %}
+                        </ul>
+                        <input type="text" class="form-control mt-2 subject-custom-input" style="display:none;" placeholder="输入新学科名称">
+                      </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">上传并处理</button>
+                  </form>
+                </div>
+
+                <!-- 文件管理 -->
+                <div class="tab-pane fade" id="subtab-content-manage">
+                  <div class="card">
+                    <h5 class="card-header">我的题库文件</h5>
+                    <div class="card-body">
+                      <div class="d-flex align-items-center mb-3">
+                        <div class="d-flex gap-2" id="fileBatchBtnGroup">
+                          <button type="button" class="btn btn-sm btn-outline-primary" id="toggleFileBatchBtn">
+                            <i class="ri ri-list-check me-1"></i>批量操作
+                          </button>
+                          <button type="button" class="btn btn-sm btn-outline-success" id="batchAddFilesToListBtn" style="display:none;"><i class="ri ri-list-check me-1"></i>加入题单</button>
+                          <button type="button" class="btn btn-sm btn-outline-danger" id="batchDeleteFilesBtn" style="display:none;"><i class="ri ri-delete-bin-line me-1"></i>删除</button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="cancelFileBatchBtn" style="display:none;"><i class="ri ri-close-line me-1"></i>取消</button>
+                        </div>
+                      </div>
+                      <div class="table-responsive">
+                        <table class="table" id="file-table">
+                          <thead>
+                            <tr>
+                              <th style="width:36px;display:none;" class="file-checkbox-th"><input type="checkbox" id="selectAllFiles" class="form-check-input"></th>
+                              <th>收藏</th>
+                              <th>文件名</th>
+                              <th>描述</th>
+                              <th>学科</th>
+                              <th>上传时间</th>
+                              <th>共享</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody id="file-table-body">
+                            {% if root_uploads or folder_groups %}
+                              {# 先显示根目录文件 #}
+                              {% for upload in root_uploads %}
+                                  <tr data-upload-id="{{ upload.id|encrypt_id }}">
+                                    <td style="display:none;" class="file-checkbox-th"><input type="checkbox" class="form-check-input file-checkbox" value="{{ upload.id }}"></td>
+                                    <td><span class="ri {% if upload.id|in_set:favorite_upload_ids %}ri-star-fill text-warning{% else %}ri-star-line{% endif %} file-favorite-star" data-upload-id="{{ upload.id|encrypt_id }}" style="cursor:pointer;font-size:1.2rem;"></span></td>
+                                    <td>
+                                      <a href="{{ upload.file.url }}" target="_blank" class="text-primary">{{ upload.file_name|default:upload.file.name|cut:"uploads/" }}</a>
+                                    </td>
+                                    <td>{{ upload.description|default:"无描述" }}</td>
+                                    <td>{{ upload.subject|default:"-" }}</td>
+                                    <td>{{ upload.uploaded_at|date:"Y-m-d H:i" }}</td>
+                                    <td>
+                                      <button type="button" class="btn btn-sm {% if upload.is_shared %}btn-success{% else %}btn-secondary{% endif %} toggle-share" data-upload-id="{{ upload.id|encrypt_id }}">
+                                        {{ upload.is_shared|yesno:"是,否" }}
+                                      </button>
+                                    </td>
+                                    <td class="action-buttons">
+                                      <a href="{% url 'open_question_bank' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-2">打开题库</a>
+                                      <a href="{% url 'comment_page' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-2">详细</a>
+                                      <button type="button" class="btn btn-sm btn-outline-success me-2 add-file-to-list-btn" data-upload-id="{{ upload.id }}">加入题单</button>
+                                      <a href="{% url 'download_upload' upload.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-2">下载 <small class="ms-1"><i class="ri ri-download-line"></i>{{ upload.download_count }}</small></a>
+                                      <button type="button" class="btn btn-sm btn-outline-danger delete-upload" data-upload-id="{{ upload.id|encrypt_id }}">删除</button>
+                                    </td>
+                                  </tr>
+                              {% endfor %}
+                              {# 再按文件夹分组显示 #}
+                               {% for group in folder_groups %}
+                                   {% with is_folder_shared=group.files.0.is_shared|default:False %}
+                                   {% with is_folder_favorited=group.files.0.id|in_set:favorite_upload_ids %}
+                                   <tr class="table-secondary folder-header" data-folder="{{ group.folder }}">
+                                     <td style="display:none;" class="file-checkbox-th"></td>
+                                     <td><span class="ri {% if is_folder_favorited %}ri-star-fill text-warning{% else %}ri-star-line{% endif %} folder-favorite-star" data-folder="{{ group.folder }}" style="cursor:pointer;font-size:1.2rem;"></span></td>
+                                     <td>
+                                       <div class="d-flex align-items-center" style="cursor:pointer;">
+                                         <i class="ri ri-folder-3-fill text-warning me-2" style="font-size:1.1rem;"></i>
+                                         <strong class="text-dark">{{ group.display_name }}</strong>
+                                         <i class="ri ri-arrow-right-s-line ms-2"></i>
+                                       </div>
+                                     </td>
+                                     <td>{{ group.files|length }} 个文件</td>
+                                     <td>-</td>
+                                     <td>-</td>
+                                     <td>
+                                       <button type="button" class="btn btn-sm {% if is_folder_shared %}btn-success{% else %}btn-secondary{% endif %} toggle-folder-share" data-folder="{{ group.folder }}">
+                                         {{ is_folder_shared|yesno:"是,否" }}
+                                       </button>
+                                     </td>
+                                     <td class="action-buttons">
+                                       <a href="{% url 'browse_folder' group.folder %}" class="btn btn-sm btn-outline-primary me-2 open-folder">打开</a>
+                                       <button type="button" class="btn btn-sm btn-outline-info me-2 edit-folder" data-folder="{{ group.folder }}">编辑</button>
+                                       <button type="button" class="btn btn-sm btn-outline-primary me-2 download-folder" data-folder="{{ group.folder }}">下载 <small><i class="ri ri-download-line"></i></small></button>
+                                       <button type="button" class="btn btn-sm btn-outline-danger delete-folder-btn" data-folder="{{ group.folder }}">删除</button>
+                                     </td>
+                                   </tr>
+                                   {% endwith %}
+                                   {% endwith %}
+                              {% endfor %}
+                            {% else %}
+                              <tr class="empty-row">
+                                <td colspan="8" class="text-center py-8">
+                                  <i class="icon-base ri ri-file-text-line text-4xl text-gray-300 mb-4 d-block"></i>
+                                  <p class="text-gray-500">暂无上传文件</p>
+                                </td>
+                              </tr>
+                            {% endif %}
+                          </tbody>
+                        </table>
+                        <!-- 上传进度模板（隐藏） -->
+                        <div id="upload-progress-template" class="d-none">
+                          <tr data-upload-id="{id}">
+                            <td style="display:none;" class="file-checkbox-th"><input type="checkbox" class="form-check-input file-checkbox" value="{real_id}"></td>
+                            <td><span class="ri ri-star-line file-favorite-star" style="cursor:pointer;font-size:1.2rem;"></span></td>
+                            <td><a href="{url}" target="_blank" class="text-primary">{name}</a></td>
+                            <td>无描述</td>
+                            <td>{subject}</td>
+                            <td>{time}</td>
+                            <td><span class="badge bg-info">等待处理</span></td>
+                            <td>
+                              <button type="button" class="btn btn-sm btn-secondary toggle-share" data-upload-id="{id}">否</button>
+                            </td>
+                            <td class="action-buttons">
+                              <a href="/open_question_bank/{id}/" class="btn btn-sm btn-outline-primary me-2">详细</a>
+                              <a href="/download_upload/{id}/" class="btn btn-sm btn-outline-primary me-2">下载 <small><i class="ri ri-download-line"></i>0</small></a>
+                              <button type="button" class="btn btn-sm btn-outline-danger delete-upload" data-upload-id="{id}">删除</button>
+                            </td>
+                          </tr>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 关注 -->
+        <div class="tab-pane fade" id="tab-content-following">
+          <div class="card">
+            <h5 class="card-header">我关注的用户</h5>
+            <div class="card-body">
+              {% if following_list %}
+                <div class="table-responsive">
+                  <table class="table table-borderless">
+                    <thead>
+                      <tr>
+                        <th>头像</th>
+                        <th>用户名</th>
+                        <th>学校</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for follow in following_list %}
+                        <tr>
+                          <td>
+                            <a href="{% url 'user_profile' follow.following.id|encrypt_id %}" class="user-avatar-link" data-user-id="{{ follow.following.id|encrypt_id }}">
+                              <img src="{% if follow.following.profile.avatar %}{{ follow.following.profile.avatar.url }}{% elif follow.following.profile.default_avatar %}{% static follow.following.profile.default_avatar %}{% else %}{% static 'pictures/头像/男生头像 1.jpg' %}{% endif %}" class="rounded-circle" width="50" height="50" style="cursor:pointer;" />
+                            </a>
+                          </td>
+                          <td>{{ follow.following.username }}</td>
+                          <td>{{ follow.following.profile.school|default:"未填写" }}</td>
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger unfollow-btn" data-user-id="{{ follow.following.id|encrypt_id }}">取消关注</button>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <div class="text-center py-8">
+                  <i class="icon-base ri ri-user-follow-line text-4xl text-gray-300 mb-4 d-block"></i>
+                  <p class="text-gray-500">暂未关注任何用户</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- 粉丝 -->
+        <div class="tab-pane fade" id="tab-content-followers">
+          <div class="card">
+            <h5 class="card-header">我的粉丝</h5>
+            <div class="card-body">
+              {% if followers_list %}
+                <div class="table-responsive">
+                  <table class="table table-borderless">
+                    <thead>
+                      <tr>
+                        <th>头像</th>
+                        <th>用户名</th>
+                        <th>学校</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for follow in followers_list %}
+                        <tr>
+                          <td>
+                            <a href="{% url 'user_profile' follow.follower.id|encrypt_id %}" class="user-avatar-link" data-user-id="{{ follow.follower.id|encrypt_id }}">
+                              <img src="{% if follow.follower.profile.avatar %}{{ follow.follower.profile.avatar.url }}{% elif follow.follower.profile.default_avatar %}{% static follow.follower.profile.default_avatar %}{% else %}{% static 'pictures/头像/男生头像 1.jpg' %}{% endif %}" class="rounded-circle" width="50" height="50" style="cursor:pointer;" />
+                            </a>
+                          </td>
+                          <td>{{ follow.follower.username }}</td>
+                          <td>{{ follow.follower.profile.school|default:"未填写" }}</td>
+                          <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary follow-btn" data-user-id="{{ follow.follower.id|encrypt_id }}">关注</button>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <div class="text-center py-8">
+                  <i class="icon-base ri ri-user-heart-line text-4xl text-gray-300 mb-4 d-block"></i>
+                  <p class="text-gray-500">暂无粉丝</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- 收藏 -->
+        <div class="tab-pane fade" id="tab-content-favorites">
+          <div class="card">
+            <ul class="nav nav-pills card-header-pills">
+              <li class="nav-item">
+                <a class="nav-link active" id="subtab-fav-files" data-bs-toggle="pill" href="#subtab-content-fav-files">文件</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" id="subtab-fav-questions" data-bs-toggle="pill" href="#subtab-content-fav-questions">题目</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" id="subtab-fav-posts" data-bs-toggle="pill" href="#subtab-content-fav-posts">帖子</a>
+              </li>
+            </ul>
+            <div class="card-body">
+              <div class="tab-content">
+                <!-- 收藏文件 -->
+                <div class="tab-pane fade show active" id="subtab-content-fav-files">
+                  <div class="card">
+                    <h5 class="card-header">收藏的文件</h5>
+                    <div class="card-body">
+                      <div id="favorite-files-body">
+                        {% if favorite_uploads %}
+                          <div class="table-responsive">
+                            <table class="table">
+                              <thead>
+                                <tr>
+                                  <th></th>
+                                  <th>文件名/文件夹名</th>
+                                  <th>描述</th>
+                                  <th>上传时间</th>
+                                  <th>操作</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <!-- 先显示收藏的文件夹 -->
+                                {% for group in favorite_folder_groups %}
+                                  <tr class="table-secondary">
+                                    <td><span class="ri ri-folder-3-fill text-warning" style="font-size:1.2rem;"></span></td>
+                                    <td>
+                                      <a href="{% url 'browse_folder' group.folder %}?owner_id={{ group.owner_id_encrypted }}" class="text-dark open-folder">
+                                        <i class="ri ri-folder-3-fill text-warning me-2" style="font-size:1.1rem;"></i>
+                                        <strong>{{ group.display_name }}</strong>
+                                        <i class="ri ri-arrow-right-s-line ms-1"></i>
+                                      </a>
+                                    </td>
+                                    <td>{{ group.files|length }} 个文件</td>
+                                    <td>-</td>
+                                    <td>
+                                      <button type="button" class="btn btn-sm btn-outline-primary me-1 download-folder" data-folder="{{ group.folder }}">下载 <small><i class="ri ri-download-line"></i></small></button>
+                                      <span class="ri ri-star-fill text-warning folder-favorite-star" data-folder="{{ group.folder }}" style="cursor:pointer;font-size:1.2rem;"></span>
+                                    </td>
+                                  </tr>
+                                {% endfor %}
+                                <!-- 再显示收藏的独立文件（不在文件夹中的文件） -->
+                                {% for u in favorite_uploads %}
+                                  {% if not u.folder_path %}
+                                  <tr data-fav-upload-id="{{ u.id|encrypt_id }}">
+                                    <td><span class="ri ri-star-fill text-warning" style="font-size:1.2rem;"></span></td>
+                                    <td><a href="{{ u.file.url }}" target="_blank" class="text-primary">{{ u.file_name|default:u.file.name|cut:"uploads/" }}</a></td>
+                                    <td>{{ u.description|default:"无描述" }}</td>
+                                    <td>{{ u.uploaded_at|date:"Y-m-d H:i" }}</td>
+                                    <td class="fav-action-buttons">
+                                      <a href="{% url 'open_question_bank' u.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-1">打开题库</a>
+                                      <a href="{% url 'comment_page' u.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-1">详细</a>
+                                      <a href="{% url 'download_upload' u.id|encrypt_id %}" class="btn btn-sm btn-outline-primary me-1">下载 <small><i class="ri ri-download-line"></i>{{ u.download_count }}</small></a>
+                                      <span class="ri ri-star-fill text-warning file-favorite-star" data-upload-id="{{ u.id|encrypt_id }}" style="cursor:pointer;font-size:1.2rem;"></span>
+                                    </td>
+                                  </tr>
+                                  {% endif %}
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        {% else %}
+                          <div class="text-center py-8 empty-fav-files">
+                            <i class="icon-base ri ri-star-line text-4xl text-gray-300 mb-4"></i>
+                            <p class="text-gray-500">暂无收藏文件</p>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- 收藏题目 -->
+                <div class="tab-pane fade" id="subtab-content-fav-questions">
+                  <div class="card">
+                    <h5 class="card-header">收藏的题目</h5>
+                    <div class="card-body">
+                      <div class="d-flex gap-3 mb-4 align-items-center flex-wrap">
+                        <select id="fav-question-type-filter" class="form-select" style="width:140px;">
+                          <option value="全部">全部题型</option>
+                          <option value="单选题">单选题</option>
+                          <option value="多选题">多选题</option>
+                          <option value="填空题">填空题</option>
+                          <option value="解答题">解答题</option>
+                          <option value="判断题">判断题</option>
+                          <option value="其他">其他</option>
+                        </select>
+                        <select id="fav-search-mode" class="form-select" style="width:150px;">
+                          <option value="全部">全部</option>
+                          <option value="题目内容">按题目内容</option>
+                          <option value="知识点">按知识点</option>
+                        </select>
+                        <div class="input-group" style="width:300px;">
+                          <input type="text" id="fav-search-input" class="form-control" placeholder="输入搜索关键词...">
+                          <button class="btn btn-primary" id="fav-search-btn" type="button">
+                            <i class="icon-base ri ri-search-2-line"></i>
+                          </button>
+                        </div>
+                        <span id="fav-result-count" class="text-muted" style="font-size:0.95rem;">共 0 个结果</span>
+                      </div>
+                      <div id="favorite-questions-body">
+                        {% if favorite_questions %}
+                          {% for q in favorite_questions %}
+                            <div class="mb-6 p-4 border rounded math-content math-lazy" data-fav-question-id="{{ q.id }}">
+                              <div class="d-flex justify-content-between align-items-start">
+                                <div class="font-bold mb-2 flex-grow-1" style="line-height:1.8;white-space:pre-wrap;"><span class="text-muted me-2">{{ forloop.counter }}.</span>{{ q.content|render_content|safe }}</div>
+                                <span class="ri ri-star-fill text-warning favorite-star ms-2" data-question-id="{{ q.id }}" style="cursor:pointer;font-size:1.2rem;flex-shrink:0;"></span>
+                              </div>
+                              {% if q.tags_list %}
+                                <div class="mb-2 d-flex gap-1 flex-wrap">
+                                  {% for tag in q.tags_list %}
+                                    <span class="badge bg-label-info">{{ tag }}</span>
+                                  {% endfor %}
+                                </div>
+                              {% endif %}
+                              <hr class="my-3">
+                              {% if q.answer %}
+                                <div class="mb-0"><strong>答案：</strong><br><div class="math-content math-lazy" style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</div></div>
+                              {% endif %}
+                            </div>
+                          {% endfor %}
+                        {% else %}
+                          <div class="text-center py-8 empty-fav-questions">
+                            <i class="icon-base ri ri-star-line text-4xl text-gray-300 mb-4"></i>
+                            <p class="text-gray-500">暂无收藏题目</p>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- 收藏帖子 -->
+                <div class="tab-pane fade" id="subtab-content-fav-posts">
+                  <div class="card">
+                    <h5 class="card-header">收藏的帖子</h5>
+                    <div class="card-body">
+                      <div id="favorite-posts-body">
+                        {% if favorite_posts %}
+                          {% for p in favorite_posts %}
+                            <div class="mb-4 border-bottom pb-4" data-fav-post-id="{{ p.id }}">
+                              <div class="d-flex align-items-center mb-2">
+                                <div class="d-block rounded overflow-hidden flex-shrink-0" style="width:36px;height:36px;">
+                                  {% with profile=p.user.profile %}
+                                  {% if profile and profile.avatar %}
+                                    <img src="{{ profile.avatar.url }}" alt="" class="w-100 h-100 object-fit-cover">
+                                  {% elif profile and profile.default_avatar %}
+                                    <img src="{% static profile.default_avatar %}" alt="" class="w-100 h-100 object-fit-cover">
+                                  {% else %}
+                                    <div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white"><i class="ri ri-user-line"></i></div>
+                                  {% endif %}
+                                  {% endwith %}
+                                </div>
+                                <div class="ms-2">
+                                  <div class="fw-semibold small">{{ p.user.username }}</div>
+                                  {% if p.user.profile.school %}
+                                  <small class="text-muted">{{ p.user.profile.school }}</small>
+                                  {% endif %}
+                                </div>
+                              </div>
+                              <div class="ms-4">
+                                {% if p.content %}
+                                <div class="mb-2" style="white-space:pre-wrap;">{{ p.content }}</div>
+                                {% endif %}
+                                {% if p.link_url %}
+                                <div class="mb-2">
+                                  <a href="{{ p.link_url }}" target="_blank" class="text-primary small">
+                                    <i class="ri ri-external-link-line"></i> {{ p.link_url }}
+                                  </a>
+                                </div>
+                                {% endif %}
+                                <small class="text-muted d-block mt-1">{{ p.created_at|date:'Y-m-d H:i' }}</small>
+                                <div class="d-flex align-items-center gap-3 mt-2">
+                                  <a href="{% url 'post_detail' p.id|encrypt_id %}" class="btn btn-sm btn-outline-secondary">详细</a>
+                                  <span class="ri ri-star-fill text-warning favorite-star ms-2" data-post-id="{{ p.id }}" style="cursor:pointer;font-size:1.2rem;flex-shrink:0;"></span>
+                                </div>
+                              </div>
+                            </div>
+                          {% endfor %}
+                        {% else %}
+                          <div class="text-center py-8 empty-fav-posts">
+                            <i class="icon-base ri ri-star-line text-4xl text-gray-300 mb-4"></i>
+                            <p class="text-gray-500">暂无收藏帖子</p>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 头像选择模态框 -->
+<div class="modal fade" id="avatarModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">选择头像</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row row-cols-4 g-3">
+          {% for avatar in default_avatars %}
+            <div class="col">
+              <img src="{% static 'pictures/头像/'|add:avatar %}" class="avatar-option d-block w-100 h-100 rounded cursor-pointer" data-avatar="{{ avatar }}" style="cursor:pointer;" onclick="selectAvatar('{{ avatar }}')" />
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除账户模态框 -->
+<div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">确认删除账户</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger mb-4">
+          <i class="ri ri-alert-line me-2"></i>此操作不可恢复，请谨慎操作！
+        </div>
+        <form id="formDeleteAccount" method="POST" action="{% url 'cancel_account' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="deletePassword1" class="form-label">请输入密码</label>
+            <input class="form-control" type="password" id="deletePassword1" name="password1" required>
+          </div>
+          <div class="mb-3">
+            <label for="deletePassword2" class="form-label">请再次输入密码</label>
+            <input class="form-control" type="password" id="deletePassword2" name="password2" required>
+          </div>
+          <div class="mb-3">
+            <label for="deleteConfirmText" class="form-label">确认声明</label>
+            <input class="form-control" type="text" id="deleteConfirmText" name="confirm_text" required>
+            <small class="text-muted d-block mt-1">请输入：我已知悉删除账户的所有影响，所有风险自行承担。</small>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal" id="btnCancelDelete">取消</button>
+        <button type="button" class="btn btn-danger" id="confirmDelete">确认删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑文件模态框 -->
+<div class="modal fade" id="editUploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">编辑文件信息</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editUploadForm">
+          {% csrf_token %}
+          <input type="hidden" id="editUploadId" name="upload_id">
+          <div class="mb-3">
+            <label for="editFileName" class="form-label">文件名</label>
+            <input type="text" class="form-control" id="editFileName" name="file_name" required>
+          </div>
+          <div class="mb-3">
+            <label for="editDescription" class="form-label">描述</label>
+            <textarea class="form-control" id="editDescription" name="description" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="editSubject" class="form-label">学科（必填）</label>
+            <div class="subject-combobox">
+              <input type="text" class="form-control subject-input" id="editSubject" name="subject" placeholder="选择或输入学科" autocomplete="off" required>
+              <ul class="subject-dropdown-menu">
+                <li><a class="dropdown-item subject-add-new" href="#">没有学科？点我添加</a></li>
+                <li><hr class="dropdown-divider"></li>
+                {% for subj in all_subjects %}
+                <li><a class="dropdown-item subject-item" href="#" data-value="{{ subj }}">{{ subj }}</a></li>
+                {% endfor %}
+              </ul>
+              <input type="text" class="form-control mt-2 subject-custom-input" style="display:none;" placeholder="输入新学科名称">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="btnSaveEdit">保存更改</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // 初始化所有学科下拉框
+  document.querySelectorAll('.subject-combobox').forEach(function(combobox) {
+    initSubjectCombobox(combobox);
+  });
+});
+
+function initSubjectCombobox(combobox) {
+  const input = combobox.querySelector('.subject-input');
+  const dropdownMenu = combobox.querySelector('.subject-dropdown-menu');
+  const customInput = combobox.querySelector('.subject-custom-input');
+  const addNewItem = combobox.querySelector('.subject-add-new');
+  
+  function filterSubjects(query) {
+    const items = dropdownMenu.querySelectorAll('.subject-item');
+    items.forEach(function(item) {
+      item.style.display = item.textContent.toLowerCase().includes(query) ? '' : 'none';
+    });
+  }
+
+  function showDropdown() {
+    filterSubjects(input.value.toLowerCase());
+    dropdownMenu.classList.add('show');
+  }
+
+  function hideDropdown() {
+    dropdownMenu.classList.remove('show');
+  }
+
+  // 输入框获取焦点时显示下拉菜单
+  input.addEventListener('focus', showDropdown);
+  
+  // 输入框输入时过滤
+  input.addEventListener('input', function() {
+    showDropdown();
+  });
+  
+  // 选择已有学科
+  dropdownMenu.addEventListener('click', function(e) {
+    const item = e.target.closest('.subject-item');
+    if (item) {
+      e.preventDefault();
+      input.value = item.dataset.value;
+      hideDropdown();
+    }
+  });
+  
+  // 点击"没有学科"进入自定义输入模式
+  addNewItem.addEventListener('click', function(e) {
+    e.preventDefault();
+    hideDropdown();
+    input.style.display = 'none';
+    customInput.style.display = '';
+    customInput.focus();
+  });
+  
+  // 自定义输入框回车确认
+  customInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const value = customInput.value.trim();
+      if (value) {
+        input.value = value;
+        customInput.style.display = 'none';
+        input.style.display = '';
+        hideDropdown();
+      }
+    }
+  });
+  
+  // 自定义输入框失焦时如果没值则恢复
+  customInput.addEventListener('blur', function() {
+    setTimeout(function() {
+      if (!customInput.value.trim()) {
+        customInput.style.display = 'none';
+        input.style.display = '';
+      }
+    }, 200);
+  });
+
+  // 输入框失焦时关闭下拉（加延迟以允许点击选项）
+  input.addEventListener('blur', function() {
+    setTimeout(hideDropdown, 200);
+  });
+}
+
+// 重新处理出错的文件
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.reprocess-upload');
+    if (btn) {
+        var uploadId = btn.dataset.uploadId;
+        btn.disabled = true;
+        btn.textContent = '处理中...';
+        fetch('/process_upload/' + uploadId + '/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.success) {
+                alert('开始重新处理，请稍后刷新页面查看结果');
+                location.reload();
+            } else {
+                alert('处理失败：' + data.message);
+                btn.disabled = false;
+                btn.textContent = '重新处理';
+            }
+        })
+        .catch(function(err) {
+            alert('处理失败：' + err.message);
+            btn.disabled = false;
+            btn.textContent = '重新处理';
+        });
+    }
+});
+
+// 上传模式切换
+(function() {
+    var modeToggle = document.getElementById('uploadModeToggle');
+    var fileInput = document.getElementById('uploadFile');
+    var hints = document.querySelectorAll('#uploadModeHint [data-mode]');
+    if (modeToggle) {
+        modeToggle.addEventListener('click', function(e) {
+            var btn = e.target.closest('.btn');
+            if (!btn || btn.classList.contains('active')) return;
+            modeToggle.querySelector('.active').classList.remove('active');
+            btn.classList.add('active');
+            var mode = btn.getAttribute('data-mode');
+            hints.forEach(function(h) {
+                h.classList.toggle('d-none', h.getAttribute('data-mode') !== mode);
+            });
+            // 清空已选文件
+            fileInput.value = '';
+            if (mode === 'folder') {
+                fileInput.setAttribute('webkitdirectory', '');
+            } else {
+                fileInput.removeAttribute('webkitdirectory');
+            }
+        });
+    }
+})();
+
+// 上传文件表单处理
+document.getElementById('formUpload').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var form = this;
+    var fileInput = document.getElementById('uploadFile');
+    var files = fileInput.files;
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var originalText = submitBtn.textContent;
+
+    if (files.length === 0) {
+        alert('请选择文件');
+        return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '上传中...';
+
+    var uploadedCount = 0;
+    var failedCount = 0;
+    var totalFiles = files.length;
+
+    // 获取CSRF token
+    var csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    // 逐个上传文件
+    for (var i = 0; i < files.length; i++) {
+        (function(file) {
+            var fileFormData = new FormData();
+            fileFormData.append('file', file);
+            fileFormData.append('file_name', file.webkitRelativePath || file.name);
+            fileFormData.append('description', document.getElementById('description').value || '');
+            fileFormData.append('subject', document.getElementById('subject').value || '');
+
+            fetch('/upload_file/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: fileFormData
+            })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    uploadedCount++;
+                } else {
+                    failedCount++;
+                }
+                // 所有文件处理完成
+                if (uploadedCount + failedCount === totalFiles) {
+                    if (failedCount === 0) {
+                        alert('全部文件上传成功！共 ' + uploadedCount + ' 个文件');
+                        location.reload();
+                    } else {
+                        alert('上传完成：成功 ' + uploadedCount + ' 个，失败 ' + failedCount + ' 个');
+                        location.reload();
+                    }
+                }
+            })
+            .catch(function(err) {
+                failedCount++;
+                if (uploadedCount + failedCount === totalFiles) {
+                    alert('上传完成：成功 ' + uploadedCount + ' 个，失败 ' + failedCount + ' 个');
+                    location.reload();
+                }
+            });
+        })(files[i]);
+    }
+});
+
+// === 文件列表批量操作（点击批量操作按钮 → 显示复选框和操作按钮） ===
+document.getElementById('toggleFileBatchBtn').addEventListener('click', function() {
+  document.querySelectorAll('.file-checkbox-th').forEach(function(el) { el.style.display = ''; });
+  document.getElementById('toggleFileBatchBtn').style.display = 'none';
+  document.getElementById('batchAddFilesToListBtn').style.display = '';
+  document.getElementById('batchDeleteFilesBtn').style.display = '';
+  document.getElementById('cancelFileBatchBtn').style.display = '';
+});
+document.getElementById('cancelFileBatchBtn').addEventListener('click', function() {
+  document.querySelectorAll('.file-checkbox-th').forEach(function(el) { el.style.display = 'none'; });
+  document.getElementById('toggleFileBatchBtn').style.display = '';
+  document.getElementById('batchAddFilesToListBtn').style.display = 'none';
+  document.getElementById('batchDeleteFilesBtn').style.display = 'none';
+  document.getElementById('cancelFileBatchBtn').style.display = 'none';
+  document.querySelectorAll('.file-checkbox').forEach(function(cb) { cb.checked = false; });
+});
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'selectAllFiles') {
+    var checked = e.target.checked;
+    document.querySelectorAll('.file-checkbox').forEach(function(cb) { cb.checked = checked; });
+  }
+});
+// 批量删除文件（使用事件委托）
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('#batchDeleteFilesBtn');
+  if (!btn) return;
+  var checked = document.querySelectorAll('.file-checkbox:checked');
+  if (checked.length === 0) { alert('请选择要删除的文件'); return; }
+  if (!confirm('确定删除选中的 ' + checked.length + ' 个文件吗？此操作不可撤销！')) return;
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  fetch('/batch_delete_uploads/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({upload_ids: ids})
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.success) { location.reload(); }
+    else { alert(d.message); }
+  });
+});
+// 加入题单功能（和 question_bank.html 一致）
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.add-to-list-btn, .add-file-to-list-btn');
+  if (!btn) return;
+  var id = parseInt(btn.dataset.questionId || btn.dataset.uploadId);
+  if (!id) return;
+  // 获取用户的题单列表
+  fetch('/get_question_lists/')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) { alert('获取题单失败'); return; }
+    var lists = data.lists;
+    var html = '<div class="mb-3"><label class="form-label">选择题单</label><select class="form-select" id="fileAddToListSelect">';
+    if (lists.length === 0) {
+      html += '<option value="">暂无题单，请先创建</option>';
+    } else {
+      lists.forEach(function(l) {
+        html += '<option value="' + l.id + '">' + l.title + '（' + l.count + '题）</option>';
+      });
+    }
+    html += '</select></div>';
+    html += '<div class="mb-3"><label class="form-label">或新建题单</label><input type="text" class="form-control" id="fileAddToListNewName" placeholder="输入题单名称"></div>';
+    var modalDiv = document.createElement('div');
+    modalDiv.className = 'modal fade';
+    modalDiv.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">加入题单</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">' + html + '</div><div class="modal-footer"><button type="button" class="btn btn-primary" id="fileAddToListConfirm">确定</button></div></div></div>';
+    document.body.appendChild(modalDiv);
+    var modal = new bootstrap.Modal(modalDiv);
+    modal.show();
+    modalDiv.addEventListener('hidden.bs.modal', function() { modalDiv.remove(); });
+    document.getElementById('fileAddToListConfirm').addEventListener('click', function() {
+      var selectedId = document.getElementById('fileAddToListSelect').value;
+      var newName = document.getElementById('fileAddToListNewName').value.trim();
+      var csrf = getCookie('csrftoken');
+      function doAdd(listId) {
+        var isFile = btn.hasAttribute('data-upload-id');
+        var url = isFile ? '/batch_add_uploads_to_list/' : '/add_to_question_list/';
+        var body = isFile ? {upload_ids: [id], list_id: listId} : {list_id: listId, question_ids: [id]};
+        fetch(url, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify(body)
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { alert('已加入题单！'); modal.hide(); }
+          else { alert(d.message); }
+        });
+      }
+      if (newName) {
+        fetch('/create_question_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({title: newName, description: ''})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { doAdd(d.question_list.id); }
+          else { alert(d.message); }
+        });
+      } else if (selectedId) {
+        doAdd(parseInt(selectedId));
+      } else {
+        alert('请选择或创建题单');
+      }
+    });
+  });
+});
+// 批量将文件加入题单
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('#batchAddFilesToListBtn');
+  if (!btn) return;
+  var checked = document.querySelectorAll('.file-checkbox:checked');
+  if (checked.length === 0) { alert('请选择要加入题单的文件'); return; }
+  var uploadIds = [];
+  checked.forEach(function(cb) { uploadIds.push(parseInt(cb.value)); });
+  fetch('/get_question_lists/').then(function(r){return r.json()}).then(function(data) {
+    if (!data.success) { alert('获取题单失败'); return; }
+    var lists = data.lists;
+    var html = '<div class="mb-3"><label class="form-label">选择题单</label><select class="form-select" id="batchSelectList">';
+    if (lists.length === 0) {
+      html += '<option value="">暂无题单，请先创建</option>';
+    } else {
+      lists.forEach(function(l) {
+        html += '<option value="' + l.id + '">' + l.title + '（' + l.count + '题）</option>';
+      });
+    }
+    html += '</select></div>';
+    html += '<div class="mb-3"><label class="form-label">或新建题单</label><input type="text" class="form-control" id="batchNewListName" placeholder="输入题单名称"></div>';
+    var modalDiv = document.createElement('div');
+    modalDiv.className = 'modal fade';
+    modalDiv.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">将选中文件的所有题目加入题单</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">' + html + '</div><div class="modal-footer"><button type="button" class="btn btn-primary" id="batchConfirmAddToList">确定</button></div></div></div>';
+    document.body.appendChild(modalDiv);
+    var modal = new bootstrap.Modal(modalDiv);
+    modal.show();
+    modalDiv.addEventListener('hidden.bs.modal', function() { modalDiv.remove(); });
+    document.getElementById('batchConfirmAddToList').addEventListener('click', function() {
+      var selectedId = document.getElementById('batchSelectList').value;
+      var newName = document.getElementById('batchNewListName').value.trim();
+      var csrf = getCookie('csrftoken');
+      function doAdd(listId) {
+        fetch('/batch_add_uploads_to_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({upload_ids: uploadIds, list_id: listId})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { alert('成功加入 ' + d.added + ' 道题目到题单！'); modal.hide(); }
+          else { alert(d.message); }
+        });
+      }
+      if (newName) {
+        fetch('/create_question_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({title: newName, description: ''})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { doAdd(d.question_list.id); }
+          else { alert(d.message); }
+        });
+      } else if (selectedId) {
+        doAdd(parseInt(selectedId));
+      } else {
+        alert('请选择或创建题单');
+      }
+    });
+  });
+});
+</script>
+{% endblock content %}

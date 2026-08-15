@@ -1,0 +1,142 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+
+{% block title %}联系我们 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-4 p-md-6">
+    <h1 class="text-primary font-bold mb-4">联系我们｜学测工坊</h1>
+
+    <p class="text-secondary lh-lg mb-4">
+      专注免费智能刷题、个性化练习，用心打造高效学习工具。如果您在使用中遇到问题、有功能建议，欢迎随时联系反馈。
+    </p>
+
+    <div class="mb-4">
+      <h2 class="h5 font-semibold text-dark mb-3">📧 联系方式</h2>
+      <div class="d-flex align-items-center mb-2">
+        <span class="fw-semibold text-dark me-2">联系邮箱：</span>
+        <a href="mailto:2966969482@qq.com" class="text-primary text-decoration-none">2966969482@qq.com</a>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    {% if user.is_authenticated %}
+    <div class="mb-4">
+      <h2 class="h5 font-semibold text-dark mb-3">💬 提交建议</h2>
+      <div id="feedbackForm">
+        <div class="mb-3">
+          <label class="form-label">您的建议</label>
+          <textarea class="form-control" id="feedbackContent" rows="4" placeholder="请描述您的建议或遇到的问题..." style="resize:vertical;"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">截图（可选）</label>
+          <input type="file" class="form-control" id="feedbackImage" accept="image/*">
+          <div id="feedbackImagePreview" class="mt-2"></div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btnSubmitFeedback" onclick="submitFeedback()">
+          <i class="ri ri-send-plane-line me-1"></i>提交建议
+        </button>
+        <div id="feedbackResult" class="mt-2"></div>
+      </div>
+    </div>
+    <hr class="my-4">
+    {% endif %}
+
+    <div class="mb-4">
+      <p class="text-secondary lh-lg mb-3" style="white-space:pre-line;">
+💗 求投喂啦
+喜欢我们的话，欢迎给猫猫打赏支持一下哦～
+所有款项均用于服务器维护与后续开发，爱你们喵😽
+      </p>
+      <div class="text-center">
+        <img src="{% static 'pictures/二维码.jpg' %}" alt="打赏二维码" class="img-fluid rounded shadow-sm" style="max-width:280px;">
+        <p class="text-muted small mt-2">扫码支持猫猫～</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+// 图片预览
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'feedbackImage') {
+    var file = e.target.files[0];
+    var preview = document.getElementById('feedbackImagePreview');
+    if (file) {
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        preview.innerHTML = '<img src="' + ev.target.result + '" style="max-height:120px;" class="img-thumbnail">';
+      };
+      reader.readAsDataURL(file);
+    } else {
+      preview.innerHTML = '';
+    }
+  }
+});
+
+function submitFeedback() {
+  var btn = document.getElementById('btnSubmitFeedback');
+  var content = document.getElementById('feedbackContent').value.trim();
+  var imageFile = document.getElementById('feedbackImage').files[0];
+  var resultDiv = document.getElementById('feedbackResult');
+
+  if (!content && !imageFile) {
+    resultDiv.innerHTML = '<div class="text-danger small">请输入建议内容或上传截图</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ri ri-loader-4-line ri-spin me-1"></i>提交中...';
+  resultDiv.innerHTML = '';
+
+  var formData = new FormData();
+  formData.append('content', content);
+  if (imageFile) formData.append('image', imageFile);
+  formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+
+  fetch('/submit_feedback/', {
+    method: 'POST',
+    body: formData
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri ri-send-plane-line me-1"></i>提交建议';
+    if (data.success) {
+      resultDiv.innerHTML = '<div class="text-success small"><i class="ri ri-check-line"></i> 感谢您的建议！已提交给管理员。</div>';
+      document.getElementById('feedbackContent').value = '';
+      document.getElementById('feedbackImage').value = '';
+      document.getElementById('feedbackImagePreview').innerHTML = '';
+    } else {
+      resultDiv.innerHTML = '<div class="text-danger small">提交失败：' + data.message + '</div>';
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ri ri-send-plane-line me-1"></i>提交建议';
+    resultDiv.innerHTML = '<div class="text-danger small">提交失败，请稍后重试</div>';
+  });
+}
+</script>
+{% endblock page_js %}

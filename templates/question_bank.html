@@ -1,0 +1,1127 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+{% load app1_extras %}
+
+{% block title %}题库 - {% if upload %}{{ upload.file_name }}{% else %}文件不存在{% endif %}{% endblock %}
+
+{% block page_css %}
+<style>
+  .question-content-view img,
+  .answer-content img {
+    display: inline-block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 4px 0;
+  }
+</style>
+{% endblock page_css %}
+
+{% block content %}
+
+<div class="row">
+  <div class="col-lg-12">
+    {% if not upload %}
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="ri ri-error-warning-line ri-2x text-muted d-block mb-2"></i>
+        <h5 class="text-muted">文件不存在或已取消共享</h5>
+        <p class="text-muted small">该文件已被删除或用户已关闭分享</p>
+        <a href="javascript:history.back()" class="btn btn-outline-primary btn-sm">返回</a>
+      </div>
+    </div>
+    {% else %}
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+          <a href="{% url 'user_profile' upload.user.id|encrypt_id %}" class="user-avatar-link">
+            <div class="d-block rounded overflow-hidden" style="width:48px; height:48px;">
+              <img src="{{ upload.user|avatar_url }}" alt="" class="w-100 h-100 object-fit-cover">
+            </div>
+          </a>
+          <div>
+            <h5 class="mb-0">
+              <a href="javascript:history.back()" class="text-decoration-none me-2">
+                <i class="ri ri-arrow-left-line"></i>
+              </a>
+              {{ upload.file_name }}
+            </h5>
+            <small class="text-muted">{{ upload.user.username }}</small>
+            {% if upload.user.profile.school %}
+            <span class="text-muted mx-1">·</span>
+            <small class="text-muted">{{ upload.user.profile.school }}</small>
+            {% endif %}
+            {% if upload.subject %}
+            <span class="text-muted mx-1">·</span>
+            <small class="text-muted">{{ upload.subject }}</small>
+            {% endif %}
+            {% if upload.description %}
+            <div class="mt-1">
+              <small class="text-muted">{{ upload.description }}</small>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% if upload.user == request.user %}
+        <div class="d-flex gap-2">
+          {% if upload.processing_status == 'error' or upload.processing_status == 'pending' or upload.processing_status == 'completed' %}
+          <button type="button" class="btn btn-sm btn-outline-success extract-questions" data-upload-id="{{ upload.id|encrypt_id }}" data-file-name="{{ upload.file_name|default:upload.file.name|cut:'uploads/' }}">
+            <i class="ri ri-ai-generate me-1"></i>{% if upload.processing_status == 'completed' %}重新{% endif %}提取题目
+          </button>
+          {% endif %}
+          <button type="button" class="btn btn-sm btn-outline-info edit-upload-btn" data-upload-id="{{ upload.id|encrypt_id }}" data-file-name="{{ upload.file_name }}" data-description="{{ upload.description|default:'' }}" data-subject="{{ upload.subject|default:'' }}">
+            <i class="ri ri-edit-line me-1"></i>编辑
+          </button>
+          <a href="{{ upload.file.url }}" download class="btn btn-sm btn-outline-primary">
+            <i class="ri ri-download-line me-1"></i>下载
+          </a>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#auxiliaryUploadModal">
+            <i class="ri ri-upload-line me-1"></i>上传解析文件
+          </button>
+        </div>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if questions|length == 0 %}
+        <div class="text-center py-5" id="emptyStatus">
+          <i class="ri ri-inbox-line ri-2x text-muted d-block mb-3"></i>
+          <h5 class="text-muted">暂无题目</h5>
+          <p class="text-muted">该文件暂无题目，您可以通过以下方式添加</p>
+          <div class="d-flex justify-content-center gap-3 mt-3">
+            {% if upload.user == request.user %}
+            <button type="button" class="btn btn-outline-success extract-questions" data-upload-id="{{ upload.id|encrypt_id }}" data-file-name="{{ upload.file_name|default:upload.file.name|cut:'uploads/' }}">
+              <i class="ri ri-ai-generate me-1"></i>提取题目
+            </button>
+            {% endif %}
+            <button type="button" class="btn btn-outline-primary" onclick="showManualAddForm()">
+              <i class="ri ri-add-line me-1"></i>手动添加
+            </button>
+          </div>
+        </div>
+        {% else %}
+        <p class="mb-0 text-muted">共 {{ page_obj.paginator.count }} 道题目</p>
+        {% endif %}
+        <!-- 手动添加题目表单（共用） -->
+        <div id="manualAddForm" class="d-none mt-3 p-3 bg-light rounded">
+            {% if user.is_authenticated %}
+            <input type="hidden" id="manualUploadId" value="{{ upload.id }}">
+            <div class="mb-2">
+              <label class="form-label">题目内容</label>
+              <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="manual-content"><i class="ri ri-image-add-line"></i> 添加图片</button>
+              </div>
+              <textarea class="form-control" id="manualContent" rows="3" placeholder="请输入题目内容" style="resize:vertical;"></textarea>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">答案</label>
+              <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="manual-answer"><i class="ri ri-image-add-line"></i> 添加图片</button>
+              </div>
+              <textarea class="form-control" id="manualAnswer" rows="2" placeholder="请输入答案" style="resize:vertical;"></textarea>
+            </div>
+            <div class="row mb-2">
+              <div class="col-md-6">
+                <label class="form-label">题型</label>
+                <select class="form-select" id="manualType">
+                  <option value="单选题">单选题</option>
+                  <option value="多选题">多选题</option>
+                  <option value="填空题">填空题</option>
+                  <option value="解答题">解答题</option>
+                  <option value="判断题">判断题</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">标签（英文逗号分隔）</label>
+                <input type="text" class="form-control" id="manualTags" placeholder="如: 高数,极限">
+              </div>
+            </div>
+            <div class="text-end">
+              <button type="button" class="btn btn-sm btn-outline-secondary cancel-add-btn me-2" onclick="hideManualAddForm()">取消</button>
+              <button type="button" class="btn btn-sm btn-success confirm-add-btn" onclick="confirmManualAdd()">确定新增</button>
+            </div>
+            {% else %}
+            <p class="text-center text-muted mb-0 small">请<a href="/login/">登录</a>后手动添加题目</p>
+            {% endif %}
+          </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        {% if questions %}
+        <div class="d-flex align-items-center mb-3">
+          <div class="d-flex gap-2" id="questionBatchBtnGroup">
+            {% if user.is_authenticated %}
+            <button type="button" class="btn btn-sm btn-outline-primary" id="toggleQuestionBatchBtn">
+              <i class="ri ri-list-check me-1"></i>批量操作
+            </button>
+            <label class="form-check-label small" id="selectAllLabel" style="display:none;">
+              <input type="checkbox" id="selectAllQuestions" class="form-check-input me-1">
+              全选
+            </label>
+            <button type="button" class="btn btn-sm btn-outline-success" id="batchAddQuestionsToListBtn" style="display:none;"><i class="ri ri-list-check me-1"></i>加入题单</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="cancelQuestionBatchBtn" style="display:none;"><i class="ri ri-close-line me-1"></i>取消</button>
+            {% endif %}
+          </div>
+        </div>
+        <span id="uploadIdData" data-upload-id="{{ upload.id }}" style="display:none;"></span>
+        {% for q in questions %}
+        <div class="mb-6 p-4 border rounded math-lazy" id="q-{{ q.id }}" data-question-id="{{ q.id }}">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex align-items-start gap-2 flex-grow-1">
+              <input type="checkbox" class="form-check-input question-checkbox mt-1 question-checkbox-th" value="{{ q.id }}" style="display:none;">
+              <div class="flex-grow-1">
+                <!-- 题号 -->
+              <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-primary me-2" style="font-size:0.85rem;">第{{ q.question_number }}题</span>
+              </div>
+              <!-- 查看模式 -->
+              <div class="question-content-view">
+                <div class="font-bold mb-2 math-content math-lazy" style="line-height:1.8;white-space:pre-wrap;">{{ q.content|render_content|safe }}</div>
+              </div>
+              <!-- 编辑模式 -->
+              <div class="question-content-edit d-none">
+                <div class="d-flex gap-1 mb-1">
+                  <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="content-{{ q.id }}"><i class="ri ri-image-add-line"></i> 添加图片</button>
+                </div>
+                <textarea class="form-control question-content-textarea" rows="4" style="resize:vertical;">{{ q.content }}</textarea>
+              </div>
+            </div>
+            </div>
+            <div class="flex-shrink-0 ms-3">
+              {% if user.is_authenticated %}
+              <button type="button" class="btn btn-sm btn-outline-primary add-to-list-btn me-2" data-question-id="{{ q.id }}">
+                <i class="ri ri-list-check"></i> 加入题单
+              </button>
+              <a href="{% url 'question_ai_chat' q.id %}" class="btn btn-sm btn-outline-info me-2"><i class="ri ri-ai-generate"></i> AI解析</a>
+              <span class="ri {% if q.id in favorited_question_ids %}ri-star-fill text-warning{% else %}ri-star-line{% endif %} favorite-star me-2" data-question-id="{{ q.id }}" style="cursor:pointer;font-size:1.2rem;"></span>
+              {% endif %}
+              {% if upload.user == request.user %}
+              <button type="button" class="btn btn-sm btn-outline-info edit-question-btn" data-question-id="{{ q.id }}">
+                <i class="ri ri-edit-line"></i> 编辑
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-question-btn" data-question-id="{{ q.id }}">
+                <i class="ri ri-delete-bin-line"></i> 删除
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-success save-question-btn d-none" data-question-id="{{ q.id }}">
+                <i class="ri ri-check-line"></i> 确定
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary cancel-edit-btn d-none" data-question-id="{{ q.id }}">
+                <i class="ri ri-x-line"></i> 取消
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-success add-question-btn" onclick="showAddForm(this)">
+                <i class="ri ri-add-line"></i> 增加题目
+              </button>
+              {% endif %}
+            </div>
+          </div>
+          {% if q.tags %}
+          <!-- 查看模式题型 -->
+          <div class="question-type-view mb-2">
+            <span class="badge bg-label-secondary">{{ q.question_type }}</span>
+          </div>
+          {% else %}
+          <div class="question-type-view mb-2">
+            <span class="badge bg-label-secondary">{{ q.question_type }}</span>
+          </div>
+          {% endif %}
+          <!-- 编辑模式题型 -->
+          <div class="question-type-edit d-none mb-2">
+            <label class="form-label mb-1">题型</label>
+            <select class="form-select question-type-select">
+              <option value="单选题" {% if q.question_type == '单选题' %}selected{% endif %}>单选题</option>
+              <option value="多选题" {% if q.question_type == '多选题' %}selected{% endif %}>多选题</option>
+              <option value="填空题" {% if q.question_type == '填空题' %}selected{% endif %}>填空题</option>
+              <option value="解答题" {% if q.question_type == '解答题' %}selected{% endif %}>解答题</option>
+              <option value="判断题" {% if q.question_type == '判断题' %}selected{% endif %}>判断题</option>
+              <option value="其他" {% if q.question_type == '其他' %}selected{% endif %}>其他</option>
+            </select>
+          </div>
+          {% if q.tags %}
+          <!-- 查看模式标签 -->
+          <div class="question-tags-view mb-2 d-flex gap-1 flex-wrap">
+            {% for tag in q.tags|split_tags %}
+            <span class="badge bg-label-info">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="question-tags-view mb-2 d-flex gap-1 flex-wrap"></div>
+          {% endif %}
+          <!-- 编辑模式标签 -->
+          <div class="question-tags-edit d-none mb-2">
+            <label class="form-label mb-1">标签（用英文逗号 "," 分隔）</label>
+            <input type="text" class="form-control knowledge-tags-input" placeholder="多个标签用英文逗号分隔" value="{% if q.tags %}{% for tag in q.tags|split_tags %}{% if not forloop.first %},{% endif %}{{ tag }}{% endfor %}{% endif %}">
+          </div>
+          <hr class="my-3">
+          <!-- 查看模式答案 -->
+          <div class="question-answer-view">
+            {% if q.answer %}
+            <div class="mb-0"><strong>答案：</strong><br><div class="answer-content math-content math-lazy" style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</div></div>
+            {% endif %}
+          </div>
+          <!-- 编辑模式答案 -->
+          <div class="question-answer-edit d-none">
+            <div class="mb-2">
+              <label class="form-label">答案</label>
+              <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="answer-{{ q.id }}"><i class="ri ri-image-add-line"></i> 添加图片</button>
+              </div>
+              <textarea class="form-control question-answer-textarea" rows="3" style="resize:vertical;">{{ q.answer }}</textarea>
+              <small class="text-muted">答案中的"(ai生成)"标记可以删除</small>
+            </div>
+          </div>
+          <!-- 增加题目表单（默认隐藏） -->
+          <div class="add-question-form d-none mt-3 p-3 bg-light rounded">
+            <h6 class="mb-3">新增题目</h6>
+            <div class="mb-2">
+              <label class="form-label">题目内容</label>
+              <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="add-content"><i class="ri ri-image-add-line"></i> 添加图片</button>
+              </div>
+              <textarea class="form-control add-content-textarea" rows="3" placeholder="请输入题目内容" style="resize:vertical;"></textarea>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">答案</label>
+              <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="add-answer"><i class="ri ri-image-add-line"></i> 添加图片</button>
+              </div>
+              <textarea class="form-control add-answer-textarea" rows="2" placeholder="请输入答案" style="resize:vertical;"></textarea>
+            </div>
+            <div class="row mb-2">
+              <div class="col-md-6">
+                <label class="form-label">题型</label>
+                <select class="form-select add-type-select">
+                  <option value="单选题">单选题</option>
+                  <option value="多选题">多选题</option>
+                  <option value="填空题">填空题</option>
+                  <option value="解答题">解答题</option>
+                  <option value="判断题">判断题</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">标签（英文逗号分隔）</label>
+                <input type="text" class="form-control add-tags-input" placeholder="如: 高数,极限">
+              </div>
+            </div>
+            <div class="text-end">
+              <button type="button" class="btn btn-sm btn-outline-secondary cancel-add-btn me-2" onclick="hideAddForm(this)">取消</button>
+              <button type="button" class="btn btn-sm btn-success confirm-add-btn" onclick="confirmAddQuestion(this)">确定新增</button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        <!-- 分页导航 -->
+        {% if page_obj and page_obj.paginator.num_pages > 1 %}
+        <nav class="mt-4">
+          <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">上一页</span></li>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+              {% if num == page_obj.number %}
+              <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+              {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+              <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+              {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">下一页</span></li>
+            {% endif %}
+          </ul>
+          <p class="text-center text-muted small">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页，共 {{ page_obj.paginator.count }} 题</p>
+        </nav>
+        {% endif %}
+        {% else %}
+        <p class="text-center text-muted py-5">暂无法查看题目内容</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock content %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+// 全局函数：增加题目表单
+function showAddForm(btn) {
+  var container = btn.closest('[data-question-id]');
+  container.querySelector('.add-question-form').classList.remove('d-none');
+  btn.classList.add('d-none');
+}
+function hideAddForm(btn) {
+  var container = btn.closest('[data-question-id]');
+  container.querySelector('.add-question-form').classList.add('d-none');
+  container.querySelector('.add-question-btn').classList.remove('d-none');
+}
+function confirmAddQuestion(btn) {
+  var container = btn.closest('[data-question-id]');
+  var uploadIdEl = document.getElementById('uploadIdData');
+  var uploadId = uploadIdEl ? uploadIdEl.dataset.uploadId : '';
+  if (!uploadId) { alert('无法获取文件ID'); return; }
+  var content = container.querySelector('.add-content-textarea').value.trim();
+  if (!content) { alert('请输入题目内容'); return; }
+  var answer = container.querySelector('.add-answer-textarea').value.trim();
+  var questionType = container.querySelector('.add-type-select').value;
+  var tags = container.querySelector('.add-tags-input').value.trim();
+  var csrf = getCookie('csrftoken');
+  fetch('/add_question/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify({upload_id: parseInt(uploadId), content: content, answer: answer, question_type: questionType, tags: tags})
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.success) {
+      var q = d.question;
+      var container = btn.closest('[data-question-id]');
+      // 恢复增加题目表单
+      container.querySelector('.add-content-textarea').value = '';
+      container.querySelector('.add-answer-textarea').value = '';
+      container.querySelector('.add-tags-input').value = '';
+      container.querySelector('.add-question-form').classList.add('d-none');
+      container.querySelector('.add-question-btn').classList.remove('d-none');
+      // 构建新题卡片
+      var tagsHtml = q.tags ? q.tags.split(/[,，]/).filter(function(t){return t.trim();}).map(function(t){return '<span class="badge bg-label-info">' + t.trim() + '</span>';}).join(' ') : '';
+      var isOwner = document.querySelector('.edit-question-btn') !== null;
+      var newCard = document.createElement('div');
+      newCard.className = 'mb-6 p-4 border rounded math-lazy';
+      newCard.id = 'q-' + q.id;
+      newCard.setAttribute('data-question-id', q.id);
+      newCard.innerHTML = '<div class="d-flex justify-content-between align-items-start">' +
+        '<div class="d-flex align-items-start gap-2 flex-grow-1">' +
+        '<input type="checkbox" class="form-check-input question-checkbox mt-1 question-checkbox-th" value="' + q.id + '" style="display:none;">' +
+        '<div class="flex-grow-1">' +
+        '<div class="d-flex align-items-center mb-2"><span class="badge bg-primary me-2" style="font-size:0.85rem;">第' + (q.question_number || '?') + '题</span></div>' +
+        '<div class="question-content-view"><div class="font-bold mb-2" style="line-height:1.8;white-space:pre-wrap;">' + renderContentJS(q.content) + '</div></div>' +
+        '<div class="question-content-edit d-none"><div class="d-flex gap-1 mb-1"><button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="content-' + q.id + '"><i class="ri ri-image-add-line"></i> 添加图片</button></div><textarea class="form-control question-content-textarea" rows="4" style="resize:vertical;">' + q.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea></div>' +
+        '<div class="question-type-view mb-2"><span class="badge bg-label-secondary">' + (q.question_type || '单选题') + '</span></div>' +
+        '<div class="question-type-edit d-none mb-2"><label class="form-label mb-1">题型</label><select class="form-select question-type-select">' +
+          '<option value="单选题"' + (q.question_type === '单选题' ? ' selected' : '') + '>单选题</option>' +
+          '<option value="多选题"' + (q.question_type === '多选题' ? ' selected' : '') + '>多选题</option>' +
+          '<option value="填空题"' + (q.question_type === '填空题' ? ' selected' : '') + '>填空题</option>' +
+          '<option value="解答题"' + (q.question_type === '解答题' ? ' selected' : '') + '>解答题</option>' +
+          '<option value="判断题"' + (q.question_type === '判断题' ? ' selected' : '') + '>判断题</option>' +
+          '<option value="其他"' + (q.question_type === '其他' ? ' selected' : '') + '>其他</option>' +
+        '</select></div>' +
+        '</div>' +
+        '</div>' +
+        '<div class="flex-shrink-0 ms-3">' +
+        '<button type="button" class="btn btn-sm btn-outline-primary add-to-list-btn me-2" data-question-id="' + q.id + '"><i class="ri ri-list-check"></i> 加入题单</button>' +
+        '<a href="/ai_chat/' + q.id + '/" class="btn btn-sm btn-outline-info me-2"><i class="ri ri-ai-generate"></i> AI解析</a>' +
+        '<span class="ri ' + (q.is_favorited ? 'ri-star-fill text-warning' : 'ri-star-line') + ' favorite-star me-2" data-question-id="' + q.id + '" style="cursor:pointer;font-size:1.2rem;"></span>' +
+        (isOwner ? '<button type="button" class="btn btn-sm btn-outline-info edit-question-btn" data-question-id="' + q.id + '"><i class="ri ri-edit-line"></i> 编辑</button>' : '') +
+        (isOwner ? '<button type="button" class="btn btn-sm btn-outline-danger delete-question-btn" data-question-id="' + q.id + '"><i class="ri ri-delete-bin-line"></i> 删除</button>' : '') +
+        (isOwner ? '<button type="button" class="btn btn-sm btn-outline-success save-question-btn d-none" data-question-id="' + q.id + '"><i class="ri ri-check-line"></i> 确定</button>' : '') +
+        (isOwner ? '<button type="button" class="btn btn-sm btn-outline-secondary cancel-edit-btn d-none" data-question-id="' + q.id + '"><i class="ri ri-x-line"></i> 取消</button>' : '') +
+        (isOwner ? '<button type="button" class="btn btn-sm btn-outline-success add-question-btn" onclick="showAddForm(this)"><i class="ri ri-add-line"></i> 增加题目</button>' : '') +
+        '</div></div>' +
+        '<div class="question-tags-view mb-2 d-flex gap-1 flex-wrap">' + tagsHtml + '</div>' +
+        '<div class="question-tags-edit d-none mb-2"><label class="form-label mb-1">标签（用英文逗号 "," 分隔）</label><input type="text" class="form-control knowledge-tags-input" placeholder="多个标签用英文逗号分隔"></div>' +
+        '<hr class="my-3">' +
+        '<div class="question-answer-view">' + (q.answer ? '<div class="mb-0"><strong>答案：</strong><br><div class="answer-content" style="white-space:pre-wrap;">' + renderContentJS(q.answer) + '</div></div>' : '') + '</div>' +
+        '<div class="question-answer-edit d-none"><div class="mb-2"><label class="form-label">答案</label><div class="d-flex gap-1 mb-1"><button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="answer-' + q.id + '"><i class="ri ri-image-add-line"></i> 添加图片</button></div><textarea class="form-control question-answer-textarea" rows="3" style="resize:vertical;">' + q.answer.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea></div></div>' +
+        '<div class="add-question-form d-none mt-3 p-3 bg-light rounded">' +
+        '<h6 class="mb-3">新增题目</h6>' +
+        '<div class="mb-2"><label class="form-label">题目内容</label><div class="d-flex gap-1 mb-1"><button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="add-content"><i class="ri ri-image-add-line"></i> 添加图片</button></div><textarea class="form-control add-content-textarea" rows="3" placeholder="请输入题目内容" style="resize:vertical;"></textarea></div>' +
+        '<div class="mb-2"><label class="form-label">答案</label><div class="d-flex gap-1 mb-1"><button type="button" class="btn btn-sm btn-outline-primary insert-image-btn" data-target="add-answer"><i class="ri ri-image-add-line"></i> 添加图片</button></div><textarea class="form-control add-answer-textarea" rows="2" placeholder="请输入答案" style="resize:vertical;"></textarea></div>' +
+        '<div class="row mb-2"><div class="col-md-6"><label class="form-label">题型</label><select class="form-select add-type-select"><option value="单选题">单选题</option><option value="多选题">多选题</option><option value="填空题">填空题</option><option value="解答题">解答题</option><option value="判断题">判断题</option><option value="其他">其他</option></select></div>' +
+        '<div class="col-md-6"><label class="form-label">标签</label><input type="text" class="form-control add-tags-input" placeholder="如: 高数,极限"></div></div>' +
+        '<div class="text-end"><button type="button" class="btn btn-sm btn-outline-secondary cancel-add-btn me-2" onclick="hideAddForm(this)">取消</button><button type="button" class="btn btn-sm btn-success confirm-add-btn" onclick="confirmAddQuestion(this)">确定新增</button></div></div>' +
+        '</div>';
+      // 在当前题目下方插入新卡片
+      container.insertAdjacentElement('afterend', newCard);
+      // 更新题目计数
+      var countEl = document.querySelector('.card-body .text-muted.mb-0');
+      if (countEl) {
+        var m = countEl.textContent.match(/共\s*(\d+)\s*道/);
+        if (m) { countEl.textContent = countEl.textContent.replace(m[1], parseInt(m[1]) + 1); }
+      }
+    }
+    else { alert(d.message); }
+  });
+}
+// Helper
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+// ===== 图片上传功能 =====
+// 在客户端将 Markdown 图片语法转为 <img> 标签
+function renderContentJS(text) {
+  if (!text) return '';
+  // 先转义 HTML
+  var s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // 将 ![alt](url) 转为 <img>
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;">');
+  return s;
+}
+
+// 全局可复用的隐藏文件输入框
+var questionImageInput = null;
+(function() {
+  questionImageInput = document.createElement('input');
+  questionImageInput.type = 'file';
+  questionImageInput.accept = 'image/*';
+  questionImageInput.style.display = 'none';
+  document.body.appendChild(questionImageInput);
+})();
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.insert-image-btn');
+  if (!btn) return;
+  var targetId = btn.dataset.target;  // e.g. "content-123" or "answer-123"
+  // 弹出文件选择
+  questionImageInput.click();
+  // 文件选择后上传
+  questionImageInput.onchange = function() {
+    var file = questionImageInput.files[0];
+    if (!file) return;
+    var formData = new FormData();
+    formData.append('image', file);
+    formData.append('csrfmiddlewaretoken', csrftoken);
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+    fetch('/upload_question_image/', {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ri ri-image-add-line"></i> 添加图片';
+      if (data.success) {
+        // 找到对应的 textarea 并插入图片 Markdown
+        var textarea = null;
+        if (targetId === 'add-content') {
+          textarea = btn.closest('.add-question-form').querySelector('.add-content-textarea');
+        } else if (targetId === 'add-answer') {
+          textarea = btn.closest('.add-question-form').querySelector('.add-answer-textarea');
+        } else if (targetId === 'manual-content') {
+          textarea = document.getElementById('manualContent');
+        } else if (targetId === 'manual-answer') {
+          textarea = document.getElementById('manualAnswer');
+        } else {
+          textarea = document.getElementById(targetId);
+          if (!textarea) {
+            var prefix = targetId.startsWith('content-') ? '.question-content-textarea' : '.question-answer-textarea';
+            var container = btn.closest('[data-question-id]');
+            if (container) textarea = container.querySelector(prefix);
+          }
+        }
+        if (textarea) {
+          var imgMarkdown = '![' + file.name + '](' + data.url + ')';
+          // 在光标位置插入
+          var start = textarea.selectionStart;
+          var end = textarea.selectionEnd;
+          textarea.value = textarea.value.substring(0, start) + imgMarkdown + textarea.value.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + imgMarkdown.length;
+          textarea.focus();
+        } else {
+          alert('图片已上传：' + data.url);
+        }
+      } else {
+        alert('上传失败: ' + data.message);
+      }
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ri ri-image-add-line"></i> 添加图片';
+      alert('上传失败，请重试');
+    });
+    questionImageInput.value = '';
+  };
+});
+
+// 获取CSRF token
+var csrftoken = getCookie('csrftoken');
+
+// 收藏功能
+document.addEventListener('click', function(e) {
+    const star = e.target.closest('.favorite-star');
+    if (star) {
+      const questionId = star.dataset.questionId;
+      fetch('/toggle_favorite/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': csrftoken
+        },
+        body: 'question_id=' + encodeURIComponent(questionId)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          if (data.is_favorited) {
+            star.classList.remove('ri-star-line');
+            star.classList.add('ri-star-fill', 'text-warning');
+          } else {
+            star.classList.remove('ri-star-fill', 'text-warning');
+            star.classList.add('ri-star-line');
+          }
+        }
+      });
+    }
+  });
+
+  // 编辑功能
+  document.addEventListener('click', function(e) {
+    // 编辑按钮
+    const editBtn = e.target.closest('.edit-question-btn');
+    if (editBtn) {
+      const questionId = editBtn.dataset.questionId;
+      const container = document.querySelector('[data-question-id="' + questionId + '"]');
+      
+      // 切换到编辑模式
+      container.querySelector('.question-content-view').classList.add('d-none');
+      container.querySelector('.question-content-edit').classList.remove('d-none');
+      container.querySelector('.question-type-view').classList.add('d-none');
+      container.querySelector('.question-type-edit').classList.remove('d-none');
+      container.querySelector('.question-answer-view').classList.add('d-none');
+      container.querySelector('.question-answer-edit').classList.remove('d-none');
+      container.querySelector('.question-tags-view').classList.add('d-none');
+      container.querySelector('.question-tags-edit').classList.remove('d-none');
+      container.querySelector('.edit-question-btn').classList.add('d-none');
+      container.querySelector('.save-question-btn').classList.remove('d-none');
+      container.querySelector('.cancel-edit-btn').classList.remove('d-none');
+      return;
+    }
+
+    // 取消按钮
+    const cancelBtn = e.target.closest('.cancel-edit-btn');
+    if (cancelBtn) {
+      const questionId = cancelBtn.dataset.questionId;
+      const container = document.querySelector('[data-question-id="' + questionId + '"]');
+      
+      // 切换回查看模式
+      container.querySelector('.question-content-view').classList.remove('d-none');
+      container.querySelector('.question-content-edit').classList.add('d-none');
+      container.querySelector('.question-type-view').classList.remove('d-none');
+      container.querySelector('.question-type-edit').classList.add('d-none');
+      container.querySelector('.question-answer-view').classList.remove('d-none');
+      container.querySelector('.question-answer-edit').classList.add('d-none');
+      container.querySelector('.question-tags-view').classList.remove('d-none');
+      container.querySelector('.question-tags-edit').classList.add('d-none');
+      container.querySelector('.edit-question-btn').classList.remove('d-none');
+      container.querySelector('.save-question-btn').classList.add('d-none');
+      container.querySelector('.cancel-edit-btn').classList.add('d-none');
+      return;
+    }
+
+    // 保存按钮
+    const saveBtn = e.target.closest('.save-question-btn');
+    if (saveBtn) {
+      const questionId = saveBtn.dataset.questionId;
+      const container = document.querySelector('[data-question-id="' + questionId + '"]');
+      
+      const content = container.querySelector('.question-content-textarea').value;
+      const answer = container.querySelector('.question-answer-textarea').value;
+      const questionType = container.querySelector('.question-type-select').value;
+      
+      // 收集标签（按英文逗号分隔）
+      const tagsInput = container.querySelector('.knowledge-tags-input').value;
+      const allTags = tagsInput ? tagsInput.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t; }) : [];
+      
+      const formData = new FormData();
+      formData.append('question_id', questionId);
+      formData.append('content', content);
+      formData.append('answer', answer);
+      formData.append('tags', allTags.join('，'));
+      formData.append('question_type', questionType);
+      formData.append('csrfmiddlewaretoken', csrftoken);
+      
+      fetch('/edit_question/', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('保存成功');
+          location.reload();
+        } else {
+          alert('保存失败: ' + data.message);
+        }
+      })
+      .catch(error => {
+        alert('保存过程中发生错误');
+      });
+      return;
+    }
+
+    // 删除题目
+    var delBtn = e.target.closest('.delete-question-btn');
+    if (delBtn) {
+      var qid = delBtn.dataset.questionId;
+      if (!confirm('确定删除该题目吗？')) return;
+      var csrf = getCookie('csrftoken');
+      fetch('/delete_question/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({question_id: parseInt(qid)})
+      }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); }
+      });
+      return;
+    }
+  }); // 结束第一个点击事件监听
+
+  // 加入题单功能
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.add-to-list-btn');
+    if (!btn) return;
+    var questionId = btn.dataset.questionId;
+    // 获取用户的题单列表
+    fetch('/get_question_lists/')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.success) { alert('获取题单失败'); return; }
+      var lists = data.lists;
+      var html = '<div class="mb-3"><label class="form-label">选择题单</label><select class="form-select" id="selectList">';
+      if (lists.length === 0) {
+        html += '<option value="">暂无题单，请先创建</option>';
+      } else {
+        lists.forEach(function(l) {
+          html += '<option value="' + l.id + '">' + l.title + '（' + l.count + '题）</option>';
+        });
+      }
+      html += '</select></div>';
+      html += '<div class="mb-3"><label class="form-label">或新建题单</label><input type="text" class="form-control" id="newListName" placeholder="输入题单名称"></div>';
+      
+      // 创建模态框
+      var modalDiv = document.createElement('div');
+      modalDiv.className = 'modal fade';
+      modalDiv.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">加入题单</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">' + html + '</div><div class="modal-footer"><button type="button" class="btn btn-primary" id="confirmAddToList">确定</button></div></div></div>';
+      document.body.appendChild(modalDiv);
+      var modal = new bootstrap.Modal(modalDiv);
+      modal.show();
+      
+      modalDiv.addEventListener('hidden.bs.modal', function() { modalDiv.remove(); });
+      
+      document.getElementById('confirmAddToList').addEventListener('click', function() {
+        var selectedId = document.getElementById('selectList').value;
+        var newName = document.getElementById('newListName').value.trim();
+        var csrf = getCookie('csrftoken');
+        
+        function doAdd(listId) {
+          fetch('/add_to_question_list/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({list_id: listId, question_ids: [parseInt(questionId)]})
+          }).then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.success) { alert('已加入题单！'); modal.hide(); }
+            else { alert(d.message); }
+          });
+        }
+        
+        if (newName) {
+          // 先创建新题单
+          fetch('/create_question_list/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({title: newName, description: ''})
+          }).then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.success) { doAdd(d.question_list.id); }
+            else { alert(d.message); }
+          });
+        } else if (selectedId) {
+          doAdd(parseInt(selectedId));
+        } else {
+          alert('请选择或创建题单');
+        }
+      });
+    });
+  });
+
+  // === 手动添加题目 (空状态表单) ===
+  function showManualAddForm() {
+    document.getElementById('manualAddForm').classList.remove('d-none');
+  }
+  function hideManualAddForm() {
+    document.getElementById('manualAddForm').classList.add('d-none');
+  }
+  function confirmManualAdd() {
+    var uploadId = document.getElementById('manualUploadId').value;
+    var content = document.getElementById('manualContent').value.trim();
+    if (!content) { alert('请输入题目内容'); return; }
+    var answer = document.getElementById('manualAnswer').value.trim();
+    var questionType = document.getElementById('manualType').value;
+    var tags = document.getElementById('manualTags').value.trim();
+    var csrf = getCookie('csrftoken');
+    fetch('/add_question/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+      body: JSON.stringify({upload_id: parseInt(uploadId), content: content, answer: answer, question_type: questionType, tags: tags})
+    }).then(function(r){return r.json()}).then(function(d){
+      if (d.success) { location.reload(); }
+      else { alert(d.message); }
+    });
+  }
+
+  // === 提取题目 ===
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.extract-questions');
+    if (btn) {
+      e.preventDefault();
+      var uploadId = btn.dataset.uploadId;
+      var fileName = btn.dataset.fileName || '该文件';
+      btn.disabled = true;
+      btn.textContent = '处理中... (0%)';
+      btn.classList.remove('btn-outline-success', 'btn-outline-warning');
+      btn.classList.add('btn-outline-info');
+      var formData = new FormData();
+      formData.append('upload_id', uploadId);
+      formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+      fetch('/extract_questions/', { method: 'POST', body: formData })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+          if (data.success) {
+            var pollInterval = setInterval(function() {
+              fetch('/get_upload_progress/?upload_id=' + encodeURIComponent(uploadId))
+                .then(function(r) { return r.json(); })
+                .then(function(progressData) {
+                  if (progressData.success) {
+                    var progress = progressData.progress;
+                    btn.textContent = '处理中... (' + progress + '%)';
+                    if (progressData.status === 'completed') {
+                      clearInterval(pollInterval);
+                      btn.textContent = '处理完成';
+                      setTimeout(function() { location.reload(); }, 500);
+                    } else if (progressData.status === 'error') {
+                      clearInterval(pollInterval);
+                      btn.disabled = false;
+                      btn.textContent = '重试';
+                      btn.classList.remove('btn-outline-info');
+                      btn.classList.add('btn-outline-warning');
+                      alert(progressData.error_msg || '处理失败');
+                    }
+                  }
+                });
+            }, 2000);
+          } else {
+            alert(data.message);
+            btn.disabled = false;
+            btn.textContent = '提取题目';
+            btn.classList.remove('btn-outline-info');
+            btn.classList.add('btn-outline-success');
+          }
+        })
+        .catch(function(err) {
+          alert('请求失败: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = '提取题目';
+        });
+    }
+  });
+</script>
+
+<!-- 上传解析文件模态框 -->
+<div class="modal fade" id="auxiliaryUploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">上传解析文件</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">上传附属文件或直接输入文本，系统将自动解析其中的题目并添加到当前题库。</p>
+        <div class="mb-3">
+          <div class="d-flex align-items-center mb-2">
+            <label class="form-label mb-0 me-3">输入方式</label>
+            <div class="btn-group btn-group-sm" role="group" id="auxInputModeToggle">
+              <button type="button" class="btn btn-outline-primary active" data-mode="file">上传文件</button>
+              <button type="button" class="btn btn-outline-primary" data-mode="text">直接输入</button>
+            </div>
+          </div>
+          <form id="auxiliaryUploadForm" enctype="multipart/form-data">
+            <input type="hidden" id="auxUploadId" value="{{ upload.id }}">
+            <div id="auxFileSection" class="mb-0">
+              <label class="form-label">选择文件</label>
+              <input type="file" class="form-control" id="auxFileInput" accept=".tex,.txt,.md,.py,.json,.csv">
+            </div>
+            <div id="auxTextSection" class="mb-0" style="display:none;">
+              <label class="form-label">输入题目文本</label>
+              <textarea class="form-control" id="auxDirectText" rows="8" placeholder="在此输入题目文本内容，系统将自动提取并解析..."></textarea>
+            </div>
+          </form>
+        </div>
+        <div id="auxUploadProgress" class="d-none text-center py-3">
+          <div class="spinner-border text-info mb-2" role="status"></div>
+          <p class="text-muted mb-0">正在解析文件并添加题目...</p>
+        </div>
+        <div id="auxUploadResult" class="d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="btnAuxUpload">上传并解析</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 输入方式切换
+document.addEventListener('click', function(e) {
+  var toggleBtn = e.target.closest('#auxInputModeToggle .btn');
+  if (!toggleBtn) return;
+  if (toggleBtn.classList.contains('active')) return;
+  var modeToggle = document.getElementById('auxInputModeToggle');
+  modeToggle.querySelector('.active').classList.remove('active');
+  toggleBtn.classList.add('active');
+  var mode = toggleBtn.getAttribute('data-mode');
+  var fileSec = document.getElementById('auxFileSection');
+  var textSec = document.getElementById('auxTextSection');
+  if (fileSec) fileSec.style.display = mode === 'file' ? '' : 'none';
+  if (textSec) textSec.style.display = mode === 'text' ? '' : 'none';
+});
+
+document.getElementById('btnAuxUpload').addEventListener('click', function() {
+  var activeModeBtn = document.querySelector('#auxInputModeToggle .active');
+  var mode = activeModeBtn ? activeModeBtn.getAttribute('data-mode') : 'file';
+
+  if (mode === 'text') {
+    var text = document.getElementById('auxDirectText').value.trim();
+    if (!text) { alert('请输入题目内容'); return; }
+
+    document.getElementById('auxUploadProgress').classList.remove('d-none');
+    document.getElementById('auxUploadResult').classList.add('d-none');
+    document.getElementById('btnAuxUpload').disabled = true;
+
+    fetch('/auxiliary_direct_text/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+          text: text,
+          upload_id: document.getElementById('auxUploadId').value
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        document.getElementById('auxUploadProgress').classList.add('d-none');
+        document.getElementById('btnAuxUpload').disabled = false;
+        var resultDiv = document.getElementById('auxUploadResult');
+        resultDiv.classList.remove('d-none');
+        if (d.success) {
+          resultDiv.innerHTML = '<div class="alert alert-success mb-0">解析成功！共添加 ' + d.count + ' 道题目。</div>';
+          setTimeout(function() { location.reload(); }, 1500);
+        } else {
+          resultDiv.innerHTML = '<div class="alert alert-danger mb-0">' + (d.message || '解析失败') + '</div>';
+      }
+    })
+    .catch(function() {
+      document.getElementById('auxUploadProgress').classList.add('d-none');
+      document.getElementById('btnAuxUpload').disabled = false;
+      document.getElementById('auxUploadResult').classList.remove('d-none');
+      document.getElementById('auxUploadResult').innerHTML = '<div class="alert alert-danger mb-0">请求失败，请重试</div>';
+    });
+    return;
+  }
+
+  // 文件模式
+  var fileInput = document.getElementById('auxFileInput');
+  var file = fileInput.files[0];
+  if (!file) { alert('请选择文件'); return; }
+
+  var formData = new FormData();
+  formData.append('upload_id', document.getElementById('auxUploadId').value);
+  formData.append('file', file);
+  formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+
+  document.getElementById('auxUploadProgress').classList.remove('d-none');
+  document.getElementById('auxUploadResult').classList.add('d-none');
+  document.getElementById('btnAuxUpload').disabled = true;
+
+  fetch('/upload_auxiliary_file/', {
+    method: 'POST',
+    body: formData
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    document.getElementById('auxUploadProgress').classList.add('d-none');
+    document.getElementById('btnAuxUpload').disabled = false;
+    var resultDiv = document.getElementById('auxUploadResult');
+    resultDiv.classList.remove('d-none');
+    if (d.success) {
+      resultDiv.innerHTML = '<div class="alert alert-success mb-0">解析成功！共添加 ' + d.count + ' 道题目。</div>';
+      setTimeout(function() { location.reload(); }, 1500);
+    } else {
+      resultDiv.innerHTML = '<div class="alert alert-danger mb-0">' + (d.message || '解析失败') + '</div>';
+    }
+  })
+  .catch(function(err) {
+    document.getElementById('auxUploadProgress').classList.add('d-none');
+    document.getElementById('btnAuxUpload').disabled = false;
+    document.getElementById('auxUploadResult').classList.remove('d-none');
+    document.getElementById('auxUploadResult').innerHTML = '<div class="alert alert-danger mb-0">请求失败: ' + err.message + '</div>';
+  });
+});
+</script>
+<script>
+// === 题目列表批量操作 ===
+document.getElementById('toggleQuestionBatchBtn').addEventListener('click', function() {
+  document.querySelectorAll('.question-checkbox-th').forEach(function(el) { el.style.display = ''; });
+  document.getElementById('toggleQuestionBatchBtn').style.display = 'none';
+  document.getElementById('batchAddQuestionsToListBtn').style.display = '';
+  document.getElementById('cancelQuestionBatchBtn').style.display = '';
+  document.getElementById('selectAllLabel').style.display = '';
+  document.getElementById('selectAllQuestions').checked = false;
+});
+document.getElementById('cancelQuestionBatchBtn').addEventListener('click', function() {
+  document.querySelectorAll('.question-checkbox-th').forEach(function(el) { el.style.display = 'none'; });
+  document.getElementById('toggleQuestionBatchBtn').style.display = '';
+  document.getElementById('batchAddQuestionsToListBtn').style.display = 'none';
+  document.getElementById('cancelQuestionBatchBtn').style.display = 'none';
+  document.getElementById('selectAllLabel').style.display = 'none';
+  document.querySelectorAll('.question-checkbox').forEach(function(cb) { cb.checked = false; });
+});
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'selectAllQuestions') {
+    var checked = e.target.checked;
+    document.querySelectorAll('.question-checkbox').forEach(function(cb) { cb.checked = checked; });
+  }
+});
+// 批量将题目加入题单（使用事件委托）
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('#batchAddQuestionsToListBtn');
+  if (!btn) return;
+  var checked = document.querySelectorAll('.question-checkbox:checked');
+  if (checked.length === 0) { alert('请选择要加入题单的题目'); return; }
+  var ids = [];
+  checked.forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  fetch('/get_question_lists/').then(function(r){return r.json()}).then(function(data) {
+    if (!data.success) { alert('获取题单失败'); return; }
+    var lists = data.lists;
+    var html = '<div class="mb-3"><label class="form-label">选择题单</label><select class="form-select" id="batchQSelectList">';
+    if (lists.length === 0) {
+      html += '<option value="">暂无题单，请先创建</option>';
+    } else {
+      lists.forEach(function(l) {
+        html += '<option value="' + l.id + '">' + l.title + '（' + l.count + '题）</option>';
+      });
+    }
+    html += '</select></div>';
+    html += '<div class="mb-3"><label class="form-label">或新建题单</label><input type="text" class="form-control" id="batchQNewListName" placeholder="输入题单名称"></div>';
+    var modalDiv = document.createElement('div');
+    modalDiv.className = 'modal fade';
+    modalDiv.innerHTML = '<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">将选中题目加入题单</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">' + html + '</div><div class="modal-footer"><button type="button" class="btn btn-primary" id="batchQConfirmAddToList">确定</button></div></div></div>';
+    document.body.appendChild(modalDiv);
+    var modal = new bootstrap.Modal(modalDiv);
+    modal.show();
+    modalDiv.addEventListener('hidden.bs.modal', function() { modalDiv.remove(); });
+    document.getElementById('batchQConfirmAddToList').addEventListener('click', function() {
+      var selectedId = document.getElementById('batchQSelectList').value;
+      var newName = document.getElementById('batchQNewListName').value.trim();
+      var csrf = getCookie('csrftoken');
+      function doBatchAdd(listId) {
+        fetch('/batch_add_questions_to_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({question_ids: ids, list_id: listId})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { alert('成功加入 ' + d.added + ' 道题目到题单！'); modal.hide(); }
+          else { alert(d.message); }
+        });
+      }
+      if (newName) {
+        fetch('/create_question_list/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({title: newName, description: ''})
+        }).then(function(r){return r.json()}).then(function(d){
+          if (d.success) { doBatchAdd(d.question_list.id); }
+          else { alert(d.message); }
+        });
+      } else if (selectedId) {
+        doBatchAdd(parseInt(selectedId));
+      } else {
+        alert('请选择或创建题单');
+      }
+    });
+  });
+});
+</script>
+
+<div class="modal fade" id="editUploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">编辑文件信息</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editUploadForm">
+          <input type="hidden" id="editUploadId" name="upload_id">
+          <div class="mb-3">
+            <label for="editFileName" class="form-label">文件名</label>
+            <input type="text" class="form-control" id="editFileName" name="file_name" required>
+          </div>
+          <div class="mb-3">
+            <label for="editDescription" class="form-label">描述</label>
+            <textarea class="form-control" id="editDescription" name="description" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="editSubject" class="form-label">学科</label>
+            <input type="text" class="form-control" id="editSubject" name="subject">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="btnSaveEdit">保存更改</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.edit-upload-btn');
+  if (btn) {
+    document.getElementById('editUploadId').value = btn.dataset.uploadId;
+    document.getElementById('editFileName').value = btn.dataset.fileName;
+    document.getElementById('editDescription').value = btn.dataset.description;
+    document.getElementById('editSubject').value = btn.dataset.subject;
+    new bootstrap.Modal(document.getElementById('editUploadModal')).show();
+  }
+});
+
+document.getElementById('btnSaveEdit').addEventListener('click', function() {
+  var formData = new FormData(document.getElementById('editUploadForm'));
+  formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+  fetch('/edit_upload/', {
+    method: 'POST',
+    body: formData
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.success) { location.reload(); }
+    else { alert(d.message); }
+  });
+});
+</script>
+{% endblock page_js %}

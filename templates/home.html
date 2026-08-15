@@ -1,0 +1,375 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+
+{% block title %}首页 - 学测工坊{% endblock %}
+
+{% block page_js %}
+{{ block.super }}
+<script src="{% static 'script/Typewriter_Effect.js' %}"></script>
+<script>
+  $(function() {
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    // 标签切换
+    $(document).on('click', '.tab-btn', function() {
+      var tab = $(this).data('tab');
+      $('.tab-btn').removeClass('active');
+      $(this).addClass('active');
+      if (tab === 'post') {
+        $('#post-form-container').show();
+      } else {
+        $('#post-form-container').hide();
+      }
+      loadTabContent(tab);
+    });
+
+    function loadTabContent(tab) {
+      $('#tab-content').html('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">加载中...</span></div></div>');
+      $.ajax({
+        url: '/home/?tab=' + tab,
+        method: 'GET',
+        dataType: 'json',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        success: function(resp) {
+          if (resp.success) {
+            $('#tab-content').html(resp.html);
+          } else {
+            $('#tab-content').html('<div class="text-center text-muted py-4">暂无内容</div>');
+          }
+        },
+        error: function() {
+          $('#tab-content').html('<div class="text-center text-muted py-4">加载失败</div>');
+        }
+      });
+    }
+
+    // Upload 点赞
+    $(document).on('click', '.btn-like-upload', function() {
+      var uploadId = $(this).data('upload-id');
+      var btn = $(this);
+      $.ajax({
+        url: '/upload_like/',
+        method: 'POST',
+        data: { upload_id: uploadId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            btn.find('.like-count').text(resp.count);
+            if (resp.liked) {
+              btn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+            } else {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            }
+          }
+        }
+      });
+    });
+
+    // Upload 收藏
+    $(document).on('click', '.btn-favorite-upload', function() {
+      var uploadId = $(this).data('upload-id');
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_file_favorite/',
+        method: 'POST',
+        data: { upload_id: uploadId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            btn.find('.favorite-count').text(resp.favorite_count);
+            if (resp.is_favorited) {
+              btn.find('i').removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              btn.find('i').removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 帖子点赞
+    $(document).on('click', '.btn-like-post', function() {
+      var postId = $(this).data('post-id');
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_post_like/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            btn.find('.like-count').text(resp.count);
+            if (resp.liked) {
+              btn.find('i').removeClass('ri-heart-line').addClass('ri-heart-fill text-danger');
+            } else {
+              btn.find('i').removeClass('ri-heart-fill text-danger').addClass('ri-heart-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 帖子收藏
+    $(document).on('click', '.btn-favorite-post', function() {
+      var postId = $(this).data('post-id');
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_post_favorite/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            btn.find('.favorite-count').text(resp.favorite_count);
+            if (resp.is_favorited) {
+              btn.find('i').removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              btn.find('i').removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          }
+        }
+      });
+    });
+
+    // 删除帖子
+    $(document).on('click', '.btn-delete-post', function() {
+      if (!confirm('确定删除该帖子？删除后无法恢复。')) return;
+      var postId = $(this).data('post-id');
+      var card = $(this).closest('.border-bottom');
+      $.ajax({
+        url: '/delete_post/',
+        method: 'POST',
+        data: { post_id: postId, csrfmiddlewaretoken: csrftoken },
+        success: function(resp) {
+          if (resp.success) {
+            card.remove();
+          } else {
+            alert(resp.message || '删除失败');
+          }
+        }
+      });
+    });
+
+    // 帖子图片预览
+    var selectedPostImage = null;
+    $(document).on('change', '#post-image', function() {
+      var file = this.files[0];
+      if (file) {
+        selectedPostImage = file;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          $('#post-image-preview').html('<div class="position-relative d-inline-block"><img src="' + e.target.result + '" class="img-thumbnail" style="max-height:100px;"><button type="button" class="btn btn-danger btn-sm position-absolute top-0 start-0 translate-middle rounded-circle p-0" style="width:22px;height:22px;line-height:20px;" onclick="removePostImage()">×</button></div>');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        selectedPostImage = null;
+      }
+    });
+
+    function removePostImage() {
+      $('#post-image').val('');
+      selectedPostImage = null;
+      $('#post-image-preview').empty();
+    }
+
+    // 创建帖子
+    $(document).on('click', '#btn-create-post', function() {
+      var formData = new FormData();
+      formData.append('content', $('#post-content').val().trim());
+      formData.append('link_url', $('#post-link-url').val().trim());
+      if (selectedPostImage) {
+        formData.append('image', selectedPostImage);
+      }
+      formData.append('csrfmiddlewaretoken', csrftoken);
+
+      if (!$('#post-content').val().trim() && !$('#post-link-url').val().trim() && !selectedPostImage) {
+        alert('请填写内容、输入链接或上传图片');
+        return;
+      }
+
+      $.ajax({
+        url: '/create_post/',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+          if (resp.success) {
+            $('#post-content').val('');
+            $('#post-link-url').val('');
+            $('#post-image').val('');
+            selectedPostImage = null;
+            $('#post-image-preview').empty();
+            loadTabContent('post');
+          } else {
+            alert(resp.message || '发布失败');
+          }
+        },
+        error: function() {
+          alert('发布失败');
+        }
+      });
+    });
+
+    // 初始加载
+    loadTabContent('all');
+
+    // 文件夹收藏
+    $(document).on('click', '.btn-favorite-folder', function() {
+      var folder = $(this).data('folder');
+      var btn = $(this);
+      $.ajax({
+        url: '/toggle_folder_favorite/',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': csrftoken },
+        data: JSON.stringify({ folder_name: folder }),
+        success: function(resp) {
+          if (resp.success) {
+            btn.find('.favorite-count').text(resp.favorite_count);
+            if (resp.is_favorited) {
+              btn.find('i').removeClass('ri-star-line').addClass('ri-star-fill text-warning');
+            } else {
+              btn.find('i').removeClass('ri-star-fill text-warning').addClass('ri-star-line');
+            }
+          } else {
+            alert('操作失败: ' + resp.message);
+          }
+        },
+        error: function(xhr, status, error) {
+          alert('操作失败，请重试');
+        }
+      });
+    });
+
+    // 文件夹下载
+    $(document).on('click', '.download-folder', function() {
+      var folderName = $(this).data('folder');
+      $.ajax({
+        url: '/download_folder/',
+        method: 'POST',
+        xhrFields: { responseType: 'blob' },
+        data: JSON.stringify({ folder_name: folderName }),
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': csrftoken },
+        success: function(blob) {
+          var url = window.URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = folderName.split('/').pop() + '.zip';
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        },
+        error: function() {
+          alert('下载失败');
+        }
+      });
+    });
+  });
+
+  function copyLink(url) {
+    var fullUrl = window.location.origin + '/' + url.replace(/^\//, '');
+    navigator.clipboard.writeText(fullUrl).then(function() {
+      alert('链接已复制：' + fullUrl);
+    });
+  }
+
+  // 点击头像跳转到个人信息页（已移至独立页面）
+</script>
+{% endblock page_js %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-12">
+    <div class="card">
+      <div class="card-body px-4 pt-3 pb-0 border-bottom">
+        <div class="d-flex justify-content-between align-items-center text-muted small mb-0">
+          <span><i class="ri ri-download-2-line me-1"></i>总下载：<strong>{{ total_downloads }}</strong> 次</span>
+          <span><i class="ri ri-file-2-line me-1"></i>已有文件：<strong>{{ total_file_size }}</strong>（{{ total_files }} 个文件）</span>
+        </div>
+      </div>
+      <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+          <li class="nav-item">
+            <button class="nav-link tab-btn active" data-tab="all" type="button">
+              <i class="ri ri-list-check me-1"></i>全部
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link tab-btn" data-tab="hot" type="button">
+              <i class="ri ri-fire-line me-1 text-danger"></i>精华
+            </button>
+          </li>
+          {% if user_school %}
+          <li class="nav-item">
+            <button class="nav-link tab-btn" data-tab="school" type="button">
+              <i class="ri ri-school-line me-1"></i>我校
+            </button>
+          </li>
+          {% endif %}
+          <li class="nav-item">
+            <button class="nav-link tab-btn" data-tab="post" type="button">
+              <i class="ri ri-edit-2-line me-1"></i>发帖
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link tab-btn" data-tab="api" type="button">
+              <i class="ri ri-code-line me-1 text-success"></i>API
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body pt-4">
+        <!-- 发帖表单（仅在发帖标签显示） -->
+        <div id="post-form-container" style="display:none;">
+          {% if user.is_authenticated %}
+          <div class="mb-4 p-3 border rounded bg-white">
+            <h6 class="mb-3"><i class="ri ri-edit-2-line me-1"></i>发布新帖</h6>
+            <div class="mb-2">
+              <textarea class="form-control" id="post-content" rows="3" placeholder="说点什么..."></textarea>
+            </div>
+            <div class="mb-2">
+              <input type="url" class="form-control" id="post-link-url" placeholder="输入链接网址（可选）">
+            </div>
+            <div class="mb-2 d-flex align-items-center gap-2">
+              <label class="btn btn-xs btn-outline-secondary">
+                <i class="ri ri-image-line"></i>
+                <input type="file" accept="image/*" id="post-image" style="display:none;">
+              </label>
+              <span class="text-muted text-sm">或上传图片</span>
+            </div>
+            <div id="post-image-preview" class="mb-2"></div>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-create-post">发布</button>
+          </div>
+          {% else %}
+          <div class="mb-4 p-3 border rounded bg-light text-center text-muted">
+            <a href="{% url 'login' %}">登录</a> 后即可发布帖子
+          </div>
+          {% endif %}
+          <hr>
+        </div>
+        <div id="tab-content">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">加载中...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

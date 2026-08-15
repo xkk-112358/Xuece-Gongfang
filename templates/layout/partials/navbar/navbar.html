@@ -1,0 +1,83 @@
+{% load static %}
+
+<nav class="layout-navbar container-xxl navbar navbar-expand-xl navbar-detached align-items-center bg-navbar-theme" id="layout-navbar">
+  <div class="layout-menu-toggle navbar-nav align-items-xl-center me-4 me-xl-0 d-xl-none">
+    <a class="nav-item nav-link px-0 me-xl-6" href="javascript:void(0)">
+      <i class="icon-base ri ri-menu-line icon-md"></i>
+    </a>
+  </div>
+  <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
+    {% if request.path == '/home/' %}
+    <!-- Typewriter Effect -->
+    <div class="navbar-nav flex-grow-1 d-flex justify-content-center align-items-center">
+      <div class="nav-item">
+        <span id="typeText" class="font-mono text-sm text-primary font-semibold"></span>
+        <span class="typed-cursor text-primary">|</span>
+      </div>
+    </div>
+    <!-- /Typewriter Effect -->
+    {% endif %}
+
+    <ul class="navbar-nav flex-row align-items-center ms-auto">
+      <!-- User -->
+      <li class="nav-item navbar-dropdown dropdown-user dropdown">
+        <a class="nav-link hide-arrow p-0 position-relative" href="/my/?user_id={{ encrypted_user_id }}">
+          {% if unread_notification_count > 0 %}
+          <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="z-index:10;">
+            <span class="visually-hidden">未读通知</span>
+          </span>
+          {% endif %}
+          <div class="avatar avatar-online">
+            <img src="{% if user.profile.avatar %}{{ user.profile.avatar.url }}{% elif user.profile.default_avatar %}{% static user.profile.default_avatar %}{% else %}{% static 'pictures/头像/男生头像1.jpg' %}{% endif %}" alt="alt" class="rounded-circle" />
+          </div>
+        </a>
+        <a class="nav-link dropdown-toggle hide-arrow p-0 ms-1" href="javascript:void(0);" data-bs-toggle="dropdown" style="font-size:10px;">
+          <i class="ri ri-arrow-down-s-line"></i>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end mt-3 py-2">
+          <li>
+            <a class="dropdown-item" href="/my/?user_id={{ encrypted_user_id }}">
+              <div class="d-flex align-items-center">
+                <div class="flex-shrink-0 me-2">
+                  <div class="avatar avatar-online">
+                    <img src="{% if user.profile.avatar %}{{ user.profile.avatar.url }}{% elif user.profile.default_avatar %}{% static user.profile.default_avatar %}{% else %}{% static 'pictures/头像/男生头像1.jpg' %}{% endif %}" alt="alt" class="w-px-40 h-auto rounded-circle" />
+                  </div>
+                </div>
+                <div class="flex-grow-1">
+                  <h6 class="mb-0 small">{{ user.username }}</h6>
+                  <small class="text-body-secondary">用户</small>
+                </div>
+              </div>
+            </a>
+          </li>
+          <li>
+            <div class="dropdown-divider"></div>
+          </li>
+          <li>
+            <a class="dropdown-item" href="/my/?user_id={{ encrypted_user_id }}">
+              <i class="icon-base ri ri-user-3-line icon-22px me-2"></i>
+              <span class="align-middle">我的资料</span>
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="/my/?user_id={{ encrypted_user_id }}">
+              <i class="icon-base ri ri-settings-4-line icon-22px me-2"></i>
+              <span class="align-middle">设置</span>
+            </a>
+          </li>
+          <li>
+            <div class="dropdown-divider"></div>
+          </li>
+          <li>
+            <div class="d-grid px-4 pt-2 pb-1">
+              <a class="btn btn-danger d-flex" href="/logout/">
+                <small class="align-middle">退出登录</small>
+                <i class="icon-base ri ri-logout-box-r-line ms-2 icon-16px"></i>
+              </a>
+            </div>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+</nav>

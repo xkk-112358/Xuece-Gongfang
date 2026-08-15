@@ -1,0 +1,265 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="zh-CN" class="layout-menu-fixed" data-assets-path="{% static '/' %}" data-framework="django" data-template="vertical-menu-light-default">
+<head>
+  <title>{% block title %}{% endblock title %} | 学测工坊</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+  
+  <!-- Favicon -->
+  <link rel="shortcut icon" type="image/x-icon" href="{% static 'pictures/logo.jpg' %}" />
+
+  <!-- Include the styles partial -->
+  {% include 'layout/partials/styles.html' %}
+
+  {% block vendor_css %}{% endblock vendor_css %}
+
+  <!--Page CSS-->
+  {% block page_css %}{% endblock page_css %}
+
+  <!-- Include the scripts partial -->
+  {% include 'layout/partials/scripts_includes.html' %}
+
+  <!-- KaTeX CSS（CDN，含字体） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <style>
+    /* 长数学公式横向滚动 */
+    .katex { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+  </style>
+
+</head>
+
+<body>
+  {% block layout %}
+  {% endblock layout %}
+
+  {% include 'layout/partials/scripts.html' %}
+
+  <!--Vendors Javascript-->
+  {% block vendor_js %} {% endblock vendor_js %}
+
+  <!--Page Javascript-->
+  {% block page_js %} {% endblock page_js %}
+
+  <!-- KaTeX JS（CDN） -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" defer></script>
+
+  <!-- KaTeX延迟渲染（IntersectionObserver按需加载） -->
+  <script>
+  (function() {
+    var katexOpts = {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false},
+        {left: '\\(', right: '\\)', display: false},
+        {left: '\\[', right: '\\]', display: true}
+      ],
+      throwOnError: false,
+      errorCallback: function(msg) { console.warn('KaTeX错误:', msg); }
+    };
+
+    function waitForKatex(callback) {
+      if (window.katex && window.renderMathInElement) {
+        callback();
+        return;
+      }
+      setTimeout(function() { waitForKatex(callback); }, 100);
+    }
+
+    // 渲染单个元素内的数学公式
+    function renderElement(el) {
+      if (!el || el.dataset.katexRendered === '1') return;
+      el.dataset.katexRendered = '1';
+      try {
+        fixDollarSpaces(el);
+        fixOrphanedLatex(el);
+        renderMathInElement(el, katexOpts);
+      } catch(e) {
+        console.warn('KaTeX渲染失败:', e);
+      }
+    }
+
+    // 修复 $ \displaystyle 等 KaTeX 不支持的格式（$后有多余空格）
+    function fixDollarSpaces(el) {
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      while (walker.nextNode()) {
+        var node = walker.currentNode;
+        var t = node.textContent;
+        var nt = t.replace(/(?<!\$)\$ +(?=\S)/g, '$').replace(/(?<=\S) +\$(?!\$)/g, '$');
+        if (nt !== t) node.textContent = nt;
+      }
+    }
+
+    // 为 array 环境自动补 \\ 换行符
+    function fixArrayLines(text) {
+      var lines = text.split('\n');
+      var result = [];
+      for (var li = 0; li < lines.length; li++) {
+        var line = lines[li];
+        var stripped = line.trim();
+        // 跳过空行、\\hline 行、已含 \\ 的行、begin/end 行
+        if (stripped === '' || stripped === '\\hline' ||
+            stripped.indexOf('\\\\') !== -1 ||
+            stripped.indexOf('\\begin') === 0 ||
+            stripped.indexOf('\\end') === 0 ||
+            stripped.indexOf('\\hline') === 0 ||
+            stripped.lastIndexOf('\\hline') === stripped.length - 6) {
+          result.push(line);
+        } else {
+          result.push(line.replace(/\s*$/, '') + ' \\\\');
+        }
+      }
+      return result.join('\n');
+    }
+
+    // 将游离的 LaTeX 命令包裹上 $...$ / $$...$$ 定界符以便 KaTeX 渲染
+    function fixOrphanedLatex(el) {
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      while (walker.nextNode()) {
+        var node = walker.currentNode;
+        var t = node.textContent;
+        if (!t) continue;
+        var result = '', i = 0;
+        while (i < t.length) {
+          // 检测 \boxed{...}
+          var boxedIdx = t.indexOf('\\boxed{', i);
+          // 检测 \begin{...}
+          var beginIdx = t.indexOf('\\begin{', i);
+          var nextIdx = -1, type = '';
+          if (boxedIdx !== -1 && (beginIdx === -1 || boxedIdx < beginIdx)) {
+            nextIdx = boxedIdx;
+            type = 'boxed';
+          } else if (beginIdx !== -1) {
+            nextIdx = beginIdx;
+            type = 'begin';
+          }
+          if (nextIdx === -1) { result += t.slice(i); break; }
+          // 检查该匹配是否已在任何数学定界符（$$ $ \( \[）内
+          var insideMath = false;
+          var ci = 0;
+          while (ci < nextIdx) {
+            if (t[ci] === '$') {
+              // 遇到 $$（双美元）视为显示数学，统一切换一次状态
+              if (ci + 1 < nextIdx && t[ci + 1] === '$') {
+                insideMath = !insideMath;
+                ci += 2;
+                continue;
+              }
+              insideMath = !insideMath;
+              ci++;
+            } else if (t[ci] === '\\' && ci+1 < nextIdx) {
+              if ((t[ci+1] === '(') || (t[ci+1] === '[')) {
+                insideMath = true;
+                ci += 2;
+                continue;
+              }
+              if ((t[ci+1] === ')') || (t[ci+1] === ']')) {
+                insideMath = false;
+                ci += 2;
+                continue;
+              }
+              ci++;
+            } else {
+              ci++;
+            }
+          }
+          result += t.slice(i, nextIdx);
+          if (type === 'boxed') {
+            var depth = 1, j = nextIdx + 7;
+            while (j < t.length && depth > 0) {
+              if (t[j] === '{') depth++;
+              else if (t[j] === '}') depth--;
+              j++;
+            }
+            if (insideMath) {
+              result += t.slice(nextIdx, j);
+            } else {
+              result += '$' + t.slice(nextIdx, j) + '$';
+            }
+            i = j;
+          } else {
+            var j2 = nextIdx + 7;
+            var envStart = j2;
+            while (j2 < t.length && t[j2] !== '}') j2++;
+            var envName = t.slice(envStart, j2);
+            j2++;
+            var endTag = '\\end{' + envName + '}';
+            var endIdx2 = t.indexOf(endTag, j2);
+            if (endIdx2 !== -1) {
+              j2 = endIdx2 + endTag.length;
+              var envContent = t.slice(nextIdx, j2);
+              // 对 array 环境，无论是否在数学定界符内，都自动补 \\ 换行符
+              if (envName === 'array') {
+                envContent = fixArrayLines(envContent);
+              }
+              if (insideMath) {
+                result += envContent;
+              } else {
+                result += '$$\n' + envContent + '\n$$';
+              }
+            } else {
+              result += t.slice(nextIdx, j2);
+            }
+            i = j2;
+          }
+        }
+        if (result !== t) node.textContent = result;
+      }
+    }
+
+    waitForKatex(function() {
+      // 使用 IntersectionObserver 延迟渲染
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+              renderElement(entry.target);
+              io.unobserve(entry.target);
+            }
+          });
+        }, { rootMargin: '200px' });
+
+        // 观察所有标记为延迟渲染的元素
+        function observeMathElements() {
+          var els = document.querySelectorAll('.math-lazy:not([data-katex-observed])');
+          for (var i = 0; i < els.length; i++) {
+            els[i].dataset.katexObserved = '1';
+            io.observe(els[i]);
+          }
+        }
+
+        observeMathElements();
+
+        // 监听动态添加的内容
+        var mutObserver = new MutationObserver(function() {
+          observeMathElements();
+        });
+        mutObserver.observe(document.body, { childList: true, subtree: true });
+      } else {
+        // 不支持 IntersectionObserver 时直接全量渲染
+        renderMathInElement(document.body, katexOpts);
+      }
+    });
+
+    // 全局渲染函数（立即渲染指定元素）
+    window.renderMathNow = function(el) {
+      waitForKatex(function() {
+        renderElement(el || document.body);
+      });
+    };
+  })();
+
+  // 强制所有 AI 解析链接在当前页打开（无论 target 属性是什么）
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a[href*="/ai_chat/"]');
+    if (a) {
+      e.preventDefault();
+      window.location.href = a.href;
+    }
+  });
+  </script>
+
+</body>
+</html>

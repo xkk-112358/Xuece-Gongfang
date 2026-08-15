@@ -1,0 +1,113 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+
+{% block title %}添加模型配置 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4">
+    <span class="text-muted fw-light"><a href="/model_config/">模型配置</a> / </span> 添加模型配置
+  </h4>
+
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">添加模型配置</h5>
+    </div>
+    <div class="card-body">
+      <form id="model-config-form" method="POST">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label for="id_api_format" class="form-label">API 格式 <span class="text-danger">*</span></label>
+          <select class="form-select" id="id_api_format" name="api_format" required>
+            <option value="openai" selected>OpenAI Chat Completions</option>
+            <option value="anthropic">Anthropic Messages</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="id_request_url" class="form-label">Base URL <span class="text-danger">*</span></label>
+          <input type="url" class="form-control" id="id_request_url" name="request_url"
+                 placeholder="https://api.deepseek.com" required>
+          <div class="form-text">API 的基础地址。系统会自动拼接路径（OpenAI 格式加 <code>/v1/chat/completions</code>，Anthropic 格式加 <code>/v1/messages</code>）</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="id_model_id" class="form-label">模型 ID <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="id_model_id" name="model_id"
+                 placeholder="例如：gpt-4o" required>
+        </div>
+
+        <div class="mb-3">
+          <label for="id_api_key" class="form-label">API 密钥 <span class="text-danger">*</span></label>
+          <input type="password" class="form-control" id="id_api_key" name="api_key"
+                 placeholder="sk-..." required>
+        </div>
+
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="id_is_enabled" name="is_enabled" value="1" checked>
+          <label class="form-check-label" for="id_is_enabled">添加后立即启用</label>
+          <div class="form-text">勾选后将自动禁用其他已启用的模型配置</div>
+        </div>
+
+        <div class="d-flex justify-content-between gap-2">
+          <a href="/model_config/" class="btn btn-label-secondary">
+            <i class="ri ri-arrow-left-line"></i> 返回
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="ri ri-save-line"></i> 保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('model-config-form');
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var apiFormat = document.getElementById('id_api_format').value;
+    var requestUrl = document.getElementById('id_request_url').value.trim();
+    var modelId = document.getElementById('id_model_id').value.trim();
+    var apiKey = document.getElementById('id_api_key').value.trim();
+
+    if (!requestUrl || !modelId || !apiKey) {
+      alert('所有字段均为必填');
+      return;
+    }
+
+    var formData = new FormData(form);
+
+    var btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+
+    fetch('/save_model_config/', {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        window.location.href = '/model_config/';
+      } else {
+        alert('保存失败：' + data.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri ri-save-line"></i> 保存';
+      }
+    })
+    .catch(function() {
+      alert('保存失败，请稍后重试');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ri ri-save-line"></i> 保存';
+    });
+  });
+});
+</script>
+{% endblock page_js %}

@@ -1,0 +1,118 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+{% block title %}自测结果{% endblock %}
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 题号点击跳转到对应题目
+    document.querySelectorAll('.q-num').forEach(function(el) {
+        el.addEventListener('click', function() {
+            var idx = parseInt(this.dataset.idx);
+            var target = document.getElementById('qdetail-' + idx);
+            if (target) { target.scrollIntoView({behavior:'smooth', block:'start'}); }
+        });
+    });
+    // 监视滚动，高亮当前题号
+    var qCards = document.querySelectorAll('.q-detail-card');
+    var qNums = document.querySelectorAll('.q-num');
+    function updateActiveNav() {
+        var scrollPos = window.scrollY + 120;
+        var activeIdx = -1;
+        qCards.forEach(function(card, i) {
+            if (card.offsetTop <= scrollPos) { activeIdx = i; }
+        });
+        qNums.forEach(function(el, i) {
+            el.style.boxShadow = (i === activeIdx) ? '0 0 0 3px #fff, 0 0 0 5px #007bff' : 'none';
+        });
+    }
+    window.addEventListener('scroll', updateActiveNav);
+    updateActiveNav();
+    // KaTeX渲染
+    if (window.renderMathInElement) {
+        renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false});
+    }
+});
+</script>
+<style>
+.q-num { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; font-weight: bold; margin: 0 4px 8px; transition: box-shadow 0.2s; }
+.q-num:hover { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #007bff !important; }
+.q-num-correct { background-color: #28a745; color: #fff; }
+.q-num-wrong { background-color: #dc3545; color: #fff; }
+.q-num-half { background-color: #ffc107; color: #333; }
+.nav-sticky { position: sticky; top: 20px; }
+.origin-link { color: #0d6efd; text-decoration: none; font-size: 0.85rem; }
+.origin-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="row">
+        <!-- 左侧：概览 + 题号导航 -->
+        <div class="col-md-3">
+            <div class="nav-sticky">
+                <div class="card mb-3">
+                    <div class="card-body text-center">
+                        <h4 class="fw-bold">自测完成！</h4>
+                        <div class="my-4">
+                            <div style="font-size:3rem;font-weight:bold;color:#28a745;">{{ result.accuracy }}%</div>
+                            <p class="text-muted">正确率</p>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4"><span class="badge bg-success" style="font-size:1rem;">{{ result.correct_count }}</span><br><small>正确</small></div>
+                            <div class="col-4"><span class="badge bg-warning text-dark" style="font-size:1rem;">{{ result.half_count }}</span><br><small>半对</small></div>
+                            <div class="col-4"><span class="badge bg-danger" style="font-size:1rem;">{{ result.wrong_count }}</span><br><small>错误</small></div>
+                        </div>
+                        <p><strong>总耗时：</strong>{{ result.total_time|format_duration }}</p>
+                        <p><strong>题单：</strong>{{ result.question_list.title|default:'-' }}</p>
+                        <a href="javascript:history.back()" class="btn btn-outline-primary btn-sm">返回</a>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <h6>题号导航 <small class="text-muted">（点击跳转）</small></h6>
+                        <div>
+                            {% for q in question_data %}
+                            <span class="q-num {% if q.status == 'correct' %}q-num-correct{% elif q.status == 'half' %}q-num-half{% else %}q-num-wrong{% endif %}" data-idx="{{ q.sort_order }}">{{ q.sort_order|add:1 }}</span>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            <span class="badge bg-success me-1">&nbsp;</span> 正确
+                            <span class="badge bg-warning text-dark ms-2 me-1">&nbsp;</span> 半对
+                            <span class="badge bg-danger ms-2 me-1">&nbsp;</span> 错误
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 右侧：题目详情 -->
+        <div class="col-md-9">
+            {% for q in question_data %}
+            <div class="card mb-3 q-detail-card" id="qdetail-{{ q.sort_order }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h6 class="card-subtitle mb-2">
+                            第 {{ q.sort_order|add:1 }} 题（{{ q.question_type }}）
+                            {% if q.status == 'correct' %}<span class="badge bg-success ms-1">正确</span>
+                            {% elif q.status == 'half' %}<span class="badge bg-warning text-dark ms-1">半对</span>
+                            {% else %}<span class="badge bg-danger ms-1">错误</span>{% endif %}
+                        </h6>
+                        {% if q.upload_id_encrypted %}
+                        <a href="{% url 'open_question_bank' upload_id=q.upload_id_encrypted %}#q-{{ q.id }}" class="origin-link me-2">查看原题库 →</a>
+                        {% endif %}
+                        <a href="{% url 'question_ai_chat' q.id %}" class="btn btn-sm btn-outline-info"><i class="ri ri-ai-generate"></i> AI解析</a>
+                    </div>
+                    <div class="math-content math-lazy mb-2" style="white-space:pre-wrap;line-height:1.8;">{{ q.content|strip_number|render_content|safe }}</div>
+                    <div class="mt-2 p-2 bg-light rounded">
+                        <p class="mb-1"><strong>答案：</strong><span class="math-content math-lazy" style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</span></p>
+                        {% if q.user_answer %}<p class="mb-0"><strong>你的选择：</strong>{{ q.user_answer }}</p>{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

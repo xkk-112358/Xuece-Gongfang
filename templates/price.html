@@ -1,0 +1,32 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+
+{% block title %}价格 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-4 p-md-6">
+    <div style="max-width:800px;margin:40px auto;padding:20px;font-family:Arial, sans-serif;">
+      <h2 style="text-align:center;color:#2d3748;">定价方案｜学测工坊</h2>
+      <p style="text-align:center;margin-bottom:30px;color:#4a5568;">基础功能永久免费，无强制收费</p>
+
+      <div style="background:#f7fafc;border-radius:12px;padding:30px;text-align:center;border:2px solid #48bb78;">
+        <h3 style="font-size:24px;margin:0;color:#2d3748;">免费版</h3>
+        <p style="font-size:40px;font-weight:bold;color:#2f855a;margin:10px 0;">¥0 <span style="font-size:16px;font-weight:normal;">永久使用</span></p>
+        <ul style="list-style:none;padding:0;margin:20px 0;line-height:2;">
+          <li>✅ 全部题库 & 智能刷题</li>
+          <li>✅ 昵称+密码登录，设备绑定更安全</li>
+          <li>✅ 错题本 & 云端数据保存</li>
+          <li>✅ 无广告、无功能限制</li>
+        </ul>
+        <p style="margin-top:20px;color:#718096;font-size:14px;">本项目独立开发，现阶段全站免费<br>喜欢本站，欢迎投币/打赏支持</p>
+      </div>
+
+      <div style="margin-top:40px;text-align:center;color:#718096;font-size:14px;">
+        <p>未来增值服务将可选付费，基础刷题功能永久免费</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

@@ -1,0 +1,297 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+
+{% block title %}接口文档 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h4 class="fw-bold mb-4"><i class="ri ri-code-line me-2"></i>接口文档</h4>
+    
+    <!-- 步骤说明 -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">📖 接入指南</h5>
+        <p>本接口允许你通过自己的 <code>.py</code> 脚本连接本系统的题库，实现自动答题等功能。</p>
+        <ol class="mb-0">
+          <li><strong>创建实例</strong> — 点击下方「创建新实例」，系统自动分配一个唯一的 <code>QUESTION_BANK_API_KEY</code></li>
+          <li><strong>配置脚本</strong> — 将生成的 API Key 填入你的 <code>script.py</code> 中</li>
+          <li><strong>开始使用</strong> — 运行脚本，即可从云端题库读取/写入题目数据</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 实例列表 -->
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="ri ri-key-2-line me-2"></i>我的 API 实例</h5>
+        <button type="button" class="btn btn-sm btn-primary" onclick="createInstance()">
+          <i class="ri ri-add-line"></i> 创建新实例
+        </button>
+      </div>
+      <div class="card-body">
+        {% if instances %}
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>实例名称</th>
+                <th>API Key</th>
+                <th>JSON 文件</th>
+                <th>相关文件</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inst in instances %}
+              <tr>
+                <td>{{ inst.name }}</td>
+                <td>
+                  <code class="api-key-text" style="cursor:pointer;user-select:all;" onclick="copyKey(this)" title="点击复制">{{ inst.api_key }}</code>
+                </td>
+                <td><a href="/api/json_file/{{ inst.id }}/" target="_blank" style="text-decoration:none;"><code style="font-size:0.75rem;">{{ inst.filename_only }}</code></a></td>
+                <td>
+                  {% with file_count=inst.files.count %}
+                  {% if file_count > 0 %}
+                  <a href="/api_instance/{{ inst.id }}/" class="btn btn-sm btn-outline-success">
+                    <i class="ri ri-file-list-line"></i> {{ file_count }} 个文件
+                  </a>
+                  {% else %}
+                  <button type="button" class="btn btn-sm btn-outline-primary" onclick="uploadScript('{{ inst.id }}')">
+                    <i class="ri ri-upload-line"></i> 上传
+                  </button>
+                  {% endif %}
+                  {% endwith %}
+                </td>
+                <td>
+                  {% if inst.is_active %}
+                  <span class="badge bg-success">启用</span>
+                  {% else %}
+                  <span class="badge bg-secondary">停用</span>
+                  {% endif %}
+                </td>
+                <td>{{ inst.created_at|date:"Y-m-d H:i" }}</td>
+                <td>
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteInstance('{{ inst.id }}', '{{ inst.name|escapejs }}')">删除</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="ri ri-inbox-line" style="font-size:2rem;"></i>
+          <p class="mt-2 mb-0">暂无实例，点击上方按钮创建</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- API 接口文档 -->
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">📡 API 接口说明</h5>
+        <table class="table table-bordered">
+          <thead class="table-light">
+            <tr><th style="width:15%;">方法</th><th style="width:30%;">接口</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge bg-success">GET</span></td>
+              <td><code>/api/question_bank/</code></td>
+              <td>获取该实例的题库数据（题目 + 错题），返回 JSON</td>
+            </tr>
+            <tr>
+              <td><span class="badge bg-warning text-dark">POST</span></td>
+              <td><code>/api/question_bank/</code></td>
+              <td>上传/同步题库数据，需在 Header 中携带 <code>X-API-Key</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <h6 class="mt-3">请求示例</h6>
+        <pre class="bg-dark text-light p-3 rounded" style="overflow-x:auto;"><span style="color:#6c757d;"># GET 请求（无需认证）</span>
+curl {{ request.scheme }}://{{ request.get_host }}/api/question_bank/?api_key=YOUR_API_KEY
+
+<span style="color:#6c757d;"># POST 请求（需在 Header 中传 API Key）</span>
+curl -X POST {{ request.scheme }}://{{ request.get_host }}/api/question_bank/ \
+  -H <span style="color:#198754;">"X-API-Key: YOUR_API_KEY"</span> \
+  -H <span style="color:#198754;">"Content-Type: application/json"</span> \
+  -d <span style="color:#198754;">'{"questions":[],"wrong_questions":[],"last_updated":"2026-06-10"}'</span></pre>
+      </div>
+    </div>
+
+    <!-- 案例解释入口 -->
+    <div class="card mt-4">
+      <div class="card-body text-center py-4">
+        <i class="ri ri-file-code-line" style="font-size:2.5rem;color:#6c757d;"></i>
+        <h5 class="mt-2">📖 案例解释</h5>
+        <p class="text-muted">详细了解 <code>script.py</code> 中 API 配置及 JSON 文件相关代码</p>
+        <a href="/api/script_explanation/" class="btn btn-outline-primary">
+          <i class="ri ri-external-link-line"></i> 查看详情
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 创建实例模态框 -->
+<div class="modal fade" id="createModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">创建新实例</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="createForm" onsubmit="return submitCreate(event)">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">实例名称</label>
+            <input type="text" class="form-control" name="name" placeholder="如: 大学物理实验" required maxlength="100">
+            <div class="form-text">为你这个实例起个名字，方便管理</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary" id="createSubmitBtn">创建</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 上传脚本模态框 -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">上传文件</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="uploadForm" onsubmit="return submitUpload(event)" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">选择文件</label>
+            <input type="file" class="form-control" name="script_file" id="fileInput" multiple webkitdirectory>
+            <div class="form-text">支持单个文件、文件夹(自动识别多文件)、压缩包.zip/.tar.gz(自动解压)</div>
+            <div id="fileCount" class="small text-muted mt-1"></div>
+          </div>
+          <input type="hidden" name="instance_id" id="uploadInstanceId" value="">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">上传</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block page_js %}
+<script>
+function getCookie(name) {
+    var v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+}
+
+function copyKey(el) {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+    var orig = el.innerHTML;
+    el.innerHTML = '✅ 已复制';
+    setTimeout(function(){ el.innerHTML = orig; }, 1500);
+}
+
+function createInstance() {
+    var modal = new bootstrap.Modal(document.getElementById('createModal'));
+    modal.show();
+}
+
+function submitCreate(e) {
+    e.preventDefault();
+    var btn = document.getElementById('createSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '创建中...';
+    var name = document.querySelector('#createForm input[name="name"]').value.trim();
+    if (!name) { alert('请输入实例名称'); btn.disabled = false; btn.textContent = '创建'; return false; }
+    fetch('/api/create_instance/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({name: name})
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) {
+            location.reload();
+        } else {
+            alert(d.message);
+            btn.disabled = false;
+            btn.textContent = '创建';
+        }
+    }).catch(function(err){
+        alert('请求失败: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = '创建';
+    });
+    return false;
+}
+
+function deleteInstance(id, name) {
+    if (!confirm('确认删除实例「' + name + '」？\n关联的题库 JSON 文件也会被删除。')) return;
+    fetch('/api/delete_instance/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({instance_id: id})
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); }
+    });
+}
+
+function uploadScript(id) {
+    document.getElementById('uploadInstanceId').value = id;
+    var modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    modal.show();
+}
+
+function submitUpload(e) {
+    e.preventDefault();
+    var btn = document.getElementById('uploadSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+    var formData = new FormData(document.getElementById('uploadForm'));
+    fetch('/api/upload_script/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCookie('csrftoken')},
+        body: formData
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); btn.disabled = false; btn.textContent = '上传'; }
+    }).catch(function(err){
+        alert('请求失败: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = '上传';
+    });
+    return false;
+}
+
+function deleteScript(id, name) {
+    if (!confirm('确认删除实例「' + name + '」的相关文件？')) return;
+    fetch('/api/delete_script/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify({instance_id: id})
+    }).then(function(r){return r.json()}).then(function(d){
+        if (d.success) { location.reload(); }
+        else { alert(d.message); }
+    });
+}
+</script>
+{% endblock %}

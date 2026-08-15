@@ -1,0 +1,84 @@
+{% load static %}
+<aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
+  <!-- App brand -->
+  <div class="app-brand demo">
+    <a href="/home/" class="app-brand-link">
+      <span class="app-brand-text demo menu-text fw-semibold">学测工坊</span>
+    </a>
+  </div>
+
+  <div class="menu-inner-shadow"></div>
+
+  <ul class="menu-inner py-1">
+    <li class="menu-item{% if request.path == '/home/' %} active{% endif %}">
+      <a href="/home/?user_id={{ encrypted_user_id }}" class="menu-link">
+        <i class="menu-icon icon-base ri ri-home-smile-line"></i>
+        <div class="text-truncate">主页</div>
+      </a>
+    </li>
+    <li class="menu-item{% if request.path == '/search/' %} active{% endif %}">
+      <a href="/search/?user_id={{ encrypted_user_id }}" class="menu-link">
+        <i class="menu-icon icon-base ri ri-search-line"></i>
+        <div class="text-truncate">搜索</div>
+      </a>
+    </li>
+    <li class="menu-item{% if request.path == '/about/' %} active{% endif %}">
+      <a href="/about/?user_id={{ encrypted_user_id }}" class="menu-link">
+        <i class="menu-icon icon-base ri ri-question-line"></i>
+        <div class="text-truncate">关于</div>
+      </a>
+    </li>
+    <li class="menu-item{% if '/my_question_lists/' in request.path or '/preview_question_list/' in request.path or '/test_reports/' in request.path or '/wrong_questions/' in request.path or '/self_test/' in request.path or '/test_result/' in request.path or '/ai_chat/' in request.path %} open active{% endif %}">
+      <a href="javascript:void(0);" class="menu-link menu-toggle">
+        <i class="menu-icon icon-base ri ri-survey-line"></i>
+        <div class="text-truncate">自测</div>
+      </a>
+      <ul class="menu-sub">
+        <li class="menu-item{% if '/my_question_lists/' in request.path %} active{% endif %}">
+          <a href="/my_question_lists/?user_id={{ encrypted_user_id }}" class="menu-link"><div class="text-truncate">我的题单</div></a>
+        </li>
+        <li class="menu-item{% if '/test_reports/' in request.path %} active{% endif %}">
+          <a href="/test_reports/?user_id={{ encrypted_user_id }}" class="menu-link"><div class="text-truncate">检测报告</div></a>
+        </li>
+        <li class="menu-item{% if '/wrong_questions/' in request.path %} active{% endif %}">
+          <a href="/wrong_questions/?user_id={{ encrypted_user_id }}" class="menu-link"><div class="text-truncate">错题查看</div></a>
+        </li>
+      </ul>
+    </li>
+    <li class="menu-item{% if request.path == '/contact/' %} active{% endif %}">
+      <a href="/contact/?user_id={{ encrypted_user_id }}" class="menu-link">
+        <i class="menu-icon icon-base ri ri-phone-line"></i>
+        <div class="text-truncate">联系我们</div>
+      </a>
+    </li>
+    <li class="menu-item{% if request.path == '/my/' %} active{% endif %}">
+      <a href="/my/?user_id={{ encrypted_user_id }}" class="menu-link position-relative">
+        <i class="menu-icon icon-base ri ri-user-line"></i>
+        <div class="text-truncate">个人中心</div>
+        {% if unread_notification_count > 0 %}
+        <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="z-index:10;margin-left:-4px;margin-top:-6px;">
+          <span class="visually-hidden">未读通知</span>
+        </span>
+        {% endif %}
+      </a>
+    </li>
+    <li class="menu-item{% if request.path == '/model_config/' %} active{% endif %}">
+      <a href="/model_config/" class="menu-link">
+        <i class="menu-icon icon-base ri ri-robot-line"></i>
+        <div class="text-truncate">模型配置</div>
+      </a>
+    </li>
+    <li class="menu-item{% if request.path == '/api_management/' %} active{% endif %}">
+      <a href="/api_management/" class="menu-link">
+        <i class="menu-icon icon-base ri ri-code-line"></i>
+        <div class="text-truncate">接口文档</div>
+      </a>
+    </li>
+    <li class="menu-item">
+      <a href="/logout/" class="menu-link">
+        <i class="menu-icon icon-base ri ri-logout-box-r-line"></i>
+        <div class="text-truncate">退出登录</div>
+      </a>
+    </li>
+  </ul>
+</aside>

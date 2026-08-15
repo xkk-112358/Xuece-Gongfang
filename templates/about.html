@@ -1,0 +1,93 @@
+{% extends 'layout/layout_vertical.html' %}
+
+{% load static %}
+
+{% block title %}关于我们 - 学测工坊{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-4 p-md-6">
+    <h1 class="text-primary font-bold mb-4">学测工坊 使用说明</h1>
+
+    <h2 class="h5 font-semibold text-dark mt-5 mb-3">一、平台简介</h2>
+    <p class="text-secondary lh-lg mb-4">
+      学测工坊是一款便捷实用的<strong>在线刷题自测、题库管理共享平台</strong>，无需复杂操作，支持上传各类文档题库，自动拆解题目，快速在线答题、自动判分，还能轻松分享题库给他人，适合日常学习、知识点自测、小组共用刷题，操作简单，上手即用。
+    </p>
+
+    <h2 class="h5 font-semibold text-dark mt-5 mb-3">二、核心功能介绍</h2>
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">1. 多格式题库上传</h3>
+      <p class="text-secondary lh-lg mb-0">
+        支持上传 Word、文档类题库文件，不用手动录入题目，直接上传整理好的习题，省去逐题输入的麻烦，省时省力。
+      </p>
+    </div>
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">2. 题目自动提取</h3>
+      <p class="text-secondary lh-lg mb-0">
+        上传题库后，平台<strong>自动识别、拆分题目、选项、答案</strong>，无需手动编辑整理，一键完成题库导入，即刻生成可答题题库。
+      </p>
+    </div>
+
+
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">3. 题库便捷分享</h3>
+      <p class="text-secondary lh-lg mb-0">
+        将自己导入的题库，直接分享给同学、好友，他人可直接使用你分享的题库答题，无需重复上传，实现题库共享共用。
+      </p>
+    </div>
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">4. 题库管理</h3>
+      <p class="text-secondary lh-lg mb-0">
+        可查看平台内所有已导入的完整题库，清晰浏览所有题目内容，管理个人学习习题，分类刷题更方便。
+      </p>
+    </div>
+
+    <h2 class="h5 font-semibold text-dark mt-5 mb-3">三、简易使用步骤</h2>
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">第一步：进入平台</h3>
+      <p class="text-secondary lh-lg mb-0">
+        打开浏览器，进入学测工坊首页，界面简洁清晰，直接点击对应功能按钮操作即可。
+      </p>
+    </div>
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">第二步：上传题库</h3>
+      <ol class="text-secondary lh-lg mb-0 ps-4">
+        <li>点击首页<strong>上传题库</strong>按钮</li>
+        <li>选择本地整理好的习题文档（选择题、填空题均可）</li>
+        <li>确认上传，等待平台自动提取题目，提示上传成功即可</li>
+      </ol>
+    </div>
+
+
+
+    <div class="mb-4">
+      <h3 class="h6 font-semibold text-dark mb-2">第三步：分享题库</h3>
+      <ol class="text-secondary lh-lg mb-0 ps-4">
+        <li>点击<strong>题库分享</strong></li>
+        <li>选择已上传的题库，生成分享链接 / 分享口令</li>
+        <li>发送给需要共享的好友，对方打开即可直接使用该题库刷题</li>
+      </ol>
+    </div>
+
+    <h2 class="h5 font-semibold text-dark mt-5 mb-3">四、使用注意事项</h2>
+    <ol class="text-secondary lh-lg mb-0 ps-4">
+      <li>上传的题库，<strong>题目排版清晰、答案标注明确</strong>，不要有杂乱格式、多余空格，平台能更精准识别题目</li>
+      <li>分享题库时，保持平台正常打开，确保好友能正常访问使用</li>
+      <li>答题过程中不要随意关闭页面，避免答题数据丢失</li>
+      <li>题库仅用于学习自用，请勿上传违规、侵权类习题内容</li>
+      <li>操作简单无复杂步骤，全程一键式操作，新手可直接使用</li>
+    </ol>
+
+    <h2 class="h5 font-semibold text-dark mt-5 mb-3">五、其他</h2>
+    <p class="text-secondary lh-lg mb-0">
+      如果你有意见或更好的建议，请在 <a href="https://github.com/xkk-112358/xuecegongfang.git" target="_blank">https://github.com/xkk-112358/xuecegongfang.git</a> 上提交 Issues，我们会尽量完善。
+    </p>
+  </div>
+</div>
+{% endblock content %}

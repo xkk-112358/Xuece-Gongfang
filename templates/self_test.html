@@ -1,0 +1,431 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+{% block title %}自测 - {{ question_list.title }}{% endblock %}
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+var questionCount = {{ questions|length }};
+var listId = {{ question_list.id }};
+var csrf = '{{ csrf_token }}';
+var answers = [];
+var timerInterval = null;
+var seconds = 0;
+var startTime = Date.now();
+var currentIndex = 0;
+
+var questionIds = [{% for q in questions %}{{ q.id }}{% if not forloop.last %},{% endif %}{% endfor %}];
+var questionTypes = [{% for q in questions %}'{{ q.question_type }}'{% if not forloop.last %},{% endif %}{% endfor %}];
+
+// localStorage 进度管理
+var STORAGE_KEY = 'self_test_' + listId;
+var paused = false;
+var pauseStart = 0;
+var totalPauseTime = 0;
+
+for (var i = 0; i < questionCount; i++) {
+    answers.push({
+        question_id: questionIds[i],
+        status: 'wrong',
+        user_answer: '',
+        time_spent: 0,
+        _start: Date.now()
+    });
+}
+
+function renderKatex(el) {
+    if (!el || el.dataset.kr === '1') return;
+    if (!window.renderMathInElement) return;
+    el.dataset.kr = '1';
+    try {
+        renderMathInElement(el, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false});
+    } catch(e) {
+        console.warn('KaTeX error:', e);
+    }
+}
+
+function waitForKatex(cb) {
+    if (window.katex && window.renderMathInElement) { cb(); return; }
+    setTimeout(function() { waitForKatex(cb); }, 100);
+}
+
+function showQuestion(idx) {
+    // 隐藏所有题目
+    document.querySelectorAll('.question-card').forEach(function(c) { c.style.display = 'none'; });
+    // 显示当前题
+    var card = document.getElementById('qcard' + idx);
+    if (card) card.style.display = '';
+    // 更新题号高亮：灰色=未作答，绿色=已作答，紫色=当前
+    document.querySelectorAll('.qnum-btn').forEach(function(b) {
+        b.className = 'btn btn-sm qnum-btn btn-outline-secondary';
+         if (answers[parseInt(b.dataset.idx)].user_answer) {
+             b.className = 'btn btn-sm qnum-btn btn-success';
+         }
+    });
+    var activeBtn = document.querySelector('.qnum-btn[data-idx="' + idx + '"]');
+    if (activeBtn) {
+        activeBtn.className = 'btn btn-sm qnum-btn btn-primary text-white';
+    }
+    currentIndex = idx;
+    // 渲染 KaTeX
+    setTimeout(function() {
+        if (card) {
+            card.querySelectorAll('.question-content, .answer-content').forEach(renderKatex);
+        }
+    }, 100);
+}
+
+function goPrev() { if (currentIndex > 0) showQuestion(currentIndex - 1); }
+function goNext() { if (currentIndex < questionCount - 1) showQuestion(currentIndex + 1); }
+
+// 保存进度到 localStorage
+function saveProgress() {
+    var data = {answers: [], seconds: seconds, currentIndex: currentIndex, totalPauseTime: totalPauseTime};
+    for (var i = 0; i < questionCount; i++) {
+        data.answers.push({
+            question_id: answers[i].question_id,
+            status: answers[i].status,
+            user_answer: answers[i].user_answer,
+            time_spent: answers[i].time_spent
+        });
+    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+// 加载进度
+function loadProgress() {
+    try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch(e) { return null; }
+}
+
+// 清除进度
+function clearProgress() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+}
+
+// 应用保存的进度
+function applySavedProgress(saved) {
+    seconds = saved.seconds || 0;
+    currentIndex = saved.currentIndex || 0;
+    totalPauseTime = saved.totalPauseTime || 0;
+    // 调整 startTime 使公式 (now - startTime - totalPauseTime)/1000 = saved.seconds
+    startTime = Date.now() - totalPauseTime - seconds * 1000;
+
+    if (saved.answers) {
+        for (var i = 0; i < saved.answers.length && i < questionCount; i++) {
+            answers[i].status = saved.answers[i].status || 'wrong';
+            answers[i].user_answer = saved.answers[i].user_answer || '';
+            answers[i].time_spent = saved.answers[i].time_spent || 0;
+        }
+    }
+
+    // 恢复选择题选项UI
+    for (var i = 0; i < questionCount; i++) {
+        if (answers[i].user_answer && answers[i].user_answer !== 'done') {
+            var optGroup = document.querySelector('.options-group[data-idx="' + i + '"]');
+            if (optGroup) {
+                var selected = answers[i].user_answer.split('');
+                optGroup.querySelectorAll('.option-btn').forEach(function(b) {
+                    if (selected.indexOf(b.dataset.value) !== -1) {
+                        b.classList.remove('btn-outline-primary');
+                        b.classList.add('btn-primary');
+                    }
+                });
+            }
+        }
+    }
+
+    // 恢复自我评价UI
+    for (var i = 0; i < questionCount; i++) {
+        if (answers[i].status === 'correct') {
+            var btn = document.querySelector('.self-eval-btn[data-idx="' + i + '"][data-status="correct"]');
+            if (btn) { btn.classList.remove('btn-outline-success'); btn.classList.add('btn-success'); }
+        } else if (answers[i].status === 'half') {
+            var btn = document.querySelector('.self-eval-btn[data-idx="' + i + '"][data-status="half"]');
+            if (btn) { btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-warning'); }
+        }
+    }
+
+    showQuestion(currentIndex);
+}
+
+// 暂停/继续
+function togglePause() {
+    if (paused) {
+        // 继续答题
+        paused = false;
+        totalPauseTime += Date.now() - pauseStart;
+        document.getElementById('pauseOverlay').style.display = 'none';
+        timerInterval = setInterval(updateTimer, 1000);
+    } else {
+        // 暂停
+        paused = true;
+        pauseStart = Date.now();
+        clearInterval(timerInterval);
+        saveProgress();
+        document.getElementById('pauseOverlay').style.display = 'flex';
+    }
+}
+
+function updateTimer() {
+    seconds = Math.floor((Date.now() - startTime - totalPauseTime) / 1000);
+    var m = Math.floor(seconds / 60);
+    var s = seconds % 60;
+    document.getElementById('timer').textContent =
+        (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// 返回确认
+function goBack() {
+    saveProgress();
+    if (confirm('确定退出自测？作答进度已保存，下次可继续作答。')) {
+        clearInterval(timerInterval);
+        window.location.href = '/my_question_lists/';
+    }
+}
+
+// 处理继续/重新开始选择
+function handleResumeChoice(choice) {
+    document.getElementById('resumeModal').style.display = 'none';
+    if (choice === 'continue') {
+        var saved = loadProgress();
+        if (saved) applySavedProgress(saved);
+        else showQuestion(0);
+    } else {
+        clearProgress();
+        showQuestion(0);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 计时器
+    timerInterval = setInterval(updateTimer, 1000);
+
+    // 题号点击
+    document.querySelectorAll('.qnum-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            showQuestion(parseInt(this.dataset.idx));
+        });
+    });
+
+    // 选择题选项点击
+    document.querySelectorAll('.option-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var qIdx = parseInt(this.dataset.idx);
+            var optGroup = this.closest('.options-group');
+            if (optGroup.dataset.type === '单选题') {
+                optGroup.querySelectorAll('.option-btn').forEach(function(b) {
+                    b.classList.remove('btn-primary');
+                    b.classList.add('btn-outline-primary');
+                });
+            }
+            this.classList.toggle('btn-primary');
+            this.classList.toggle('btn-outline-primary');
+            var selected = [];
+            optGroup.querySelectorAll('.option-btn.btn-primary').forEach(function(b) {
+                selected.push(b.dataset.value);
+            });
+            answers[qIdx].user_answer = selected.join('');
+            // 更新题号状态
+            var qnumBtn = document.querySelector('.qnum-btn[data-idx="' + qIdx + '"]');
+            if (qnumBtn && qIdx !== currentIndex) {
+                qnumBtn.className = 'btn btn-sm qnum-btn btn-success';
+            }
+        });
+    });
+
+    // 查看答案按钮
+    document.querySelectorAll('.toggle-answer-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var answerDiv = this.closest('.card-body').querySelector('.answer-content');
+            if (answerDiv.style.display === 'none') {
+                answerDiv.style.display = 'block';
+                this.textContent = '收起答案';
+                renderKatex(answerDiv);
+            } else {
+                answerDiv.style.display = 'none';
+                this.textContent = '查看答案';
+            }
+        });
+    });
+
+    // 自我评价
+    document.querySelectorAll('.self-eval-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var qIdx = parseInt(this.dataset.idx);
+            var status = this.dataset.status;
+            var group = this.closest('.btn-group');
+            group.querySelectorAll('.self-eval-btn').forEach(function(b) {
+                b.className = 'btn btn-outline-success self-eval-btn';
+                if (b.dataset.status === 'half') b.className = 'btn btn-outline-warning self-eval-btn';
+                if (b.dataset.status === 'wrong') b.className = 'btn btn-outline-danger self-eval-btn';
+            });
+            if (status === 'correct') {
+                this.classList.remove('btn-outline-success');
+                this.classList.add('btn-success');
+            } else if (status === 'half') {
+                this.classList.remove('btn-outline-warning');
+                this.classList.add('btn-warning');
+            } else {
+                this.classList.remove('btn-outline-danger');
+                this.classList.add('btn-danger');
+            }
+            answers[qIdx].status = status;
+            answers[qIdx].user_answer = 'done';  // 标记为已作答
+            // 更新题号状态
+            var qnumBtn = document.querySelector('.qnum-btn[data-idx="' + qIdx + '"]');
+            if (qnumBtn) {
+                qnumBtn.className = 'btn btn-sm qnum-btn btn-success';
+                if (qIdx === currentIndex) {
+                    qnumBtn.className = 'btn btn-sm qnum-btn btn-primary text-white';
+                }
+            }
+        });
+    });
+
+    // 检查是否有保存的进度
+    waitForKatex(function() {
+        var saved = loadProgress();
+        if (saved) {
+            document.getElementById('resumeModal').style.display = 'flex';
+        } else {
+            showQuestion(0);
+        }
+    });
+
+    // 提交
+    document.getElementById('submitTest').addEventListener('click', function() {
+        if (!confirm('确定提交自测？')) return;
+        for (var i = 0; i < questionCount; i++) {
+            var elapsed = Math.floor((Date.now() - answers[i]._start) / 1000);
+            answers[i].time_spent = elapsed;
+        }
+        clearInterval(timerInterval);
+        clearProgress();
+        var submitBtn = this;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '提交中...';
+        fetch('/submit_self_test/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({list_id: listId, answers: answers, total_time: seconds})
+        }).then(function(r){return r.json()}).then(function(d){
+            if (d.success) {
+                window.location.href = '/test_result/' + d.result_id + '/';
+            } else {
+                alert(d.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交';
+            }
+        });
+    });
+});
+</script>
+<style>
+.qnum-btn { width: 36px; margin: 2px; font-size: 0.85rem; }
+#pauseOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; }
+#pauseOverlay h2 { color: #fff; font-size: 2.5rem; margin-bottom: 1.5rem; }
+#resumeModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9998; display: none; align-items: center; justify-content: center; }
+#resumeModal .modal-box { background: #fff; border-radius: 12px; padding: 2rem; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+#resumeModal .modal-box h4 { margin-bottom: 1rem; }
+#resumeModal .modal-box p { color: #666; margin-bottom: 1.5rem; }
+#resumeModal .modal-box .btn { margin: 0 0.5rem; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="fw-bold mb-0">{{ question_list.title }} - 自测</h4>
+            <small class="text-muted">共 {{ questionCount }} 道题</small>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-dark" style="font-size:1.2rem;" id="timer">00:00</span>
+            <button class="btn btn-outline-warning" onclick="togglePause()"><i class="ri ri-pause-line"></i> 暂停</button>
+            <button class="btn btn-outline-secondary" onclick="goBack()">返回</button>
+            <button class="btn btn-primary" id="submitTest">提交</button>
+        </div>
+    </div>
+
+    <!-- 题号导航 -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex flex-wrap align-items-center gap-1">
+                {% for q in questions %}
+                <button type="button" class="btn btn-sm btn-outline-secondary qnum-btn" data-idx="{{ forloop.counter0 }}">{{ forloop.counter }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 题目卡片，一次只显示一题 -->
+    {% for q in questions %}
+    <div class="card mb-3 question-card" id="qcard{{ forloop.counter0 }}" style="display:none;">
+        <div class="card-body">
+            <h6 class="card-subtitle mb-2 text-muted">第 {{ forloop.counter }} 题（{{ q.question_type }}）</h6>
+            <div class="question-content mb-3 math-content math-lazy" style="white-space:pre-wrap;line-height:1.8;">{{ q.content|strip_number|render_content|safe }}</div>
+
+            {% if q.question_type == '单选题' or q.question_type == '多选题' %}
+            <div class="options-group" data-idx="{{ forloop.counter0 }}" data-type="{{ q.question_type }}" data-answer="{{ q.answer }}">
+                {% with options=q.content|extract_options %}
+                {% for opt in options %}
+                {% with opt_letter=opt|slice:":1" %}
+                <button type="button" class="btn btn-outline-primary option-btn me-2 mb-2" data-idx="{{ forloop.parentloop.counter0 }}" data-value="{{ opt_letter }}">{{ opt_letter }}</button>
+                {% endwith %}
+                {% endfor %}
+                {% endwith %}
+            </div>
+            {% else %}
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-info toggle-answer-btn">查看答案</button>
+                <div class="answer-content mt-2 p-2 bg-light rounded" style="display:none;">
+                    <strong>答案：</strong><span class="math-content math-lazy">{{ q.answer|render_content|safe }}</span>
+                </div>
+            </div>
+            <div class="mt-3">
+                <small class="text-muted">自我评价：</small>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-success self-eval-btn" data-idx="{{ forloop.counter0 }}" data-status="correct">做对了</button>
+                    <button type="button" class="btn btn-outline-warning self-eval-btn" data-idx="{{ forloop.counter0 }}" data-status="half">半对</button>
+                    <button type="button" class="btn btn-outline-danger self-eval-btn" data-idx="{{ forloop.counter0 }}" data-status="wrong">做错了</button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 上下题导航 -->
+            <div class="mt-4 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary" onclick="goPrev()" {% if forloop.first %}disabled{% endif %}>
+                    <i class="ri ri-arrow-left-line"></i> 上一题
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="goNext()" {% if forloop.last %}disabled{% endif %}>
+                    下一题 <i class="ri ri-arrow-right-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 暂停遮罩 -->
+<div id="pauseOverlay">
+    <h2><i class="ri ri-pause-circle-line"></i> 已暂停</h2>
+    <p style="color:#ccc;font-size:1.1rem;">作答进度已保存</p>
+    <button class="btn btn-lg btn-success" onclick="togglePause()"><i class="ri ri-play-fill"></i> 继续答题</button>
+</div>
+
+<!-- 恢复进度弹窗 -->
+<div id="resumeModal">
+    <div class="modal-box">
+        <h4>📝 检测到上次未完成的作答</h4>
+        <p>您有已保存的作答进度，是否继续作答？</p>
+        <div>
+            <button class="btn btn-primary" onclick="handleResumeChoice('continue')">继续作答</button>
+            <button class="btn btn-outline-danger" onclick="handleResumeChoice('restart')">重新开始</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

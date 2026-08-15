@@ -1,0 +1,48 @@
+{% load static %}
+{% load app1_extras %}
+<div class="mb-4 border-bottom pb-4">
+  <div class="d-flex align-items-center mb-3">
+    <a href="{% url 'user_profile' item.user.id|encrypt_id %}" class="user-avatar-link" data-user-id="{{ item.user.id|encrypt_id }}">
+      <div class="d-block w-px-40 h-px-40 rounded overflow-hidden me-2 flex-shrink-0">
+        {% if item.profile and item.profile.avatar %}
+          <img src="{{ item.profile.avatar.url }}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% elif item.profile and item.profile.default_avatar %}
+          <img src="{% static item.profile.default_avatar %}" alt="头像" class="w-100 h-100 object-fit-cover">
+        {% else %}
+          <div class="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white">
+            <i class="ri ri-user-line"></i>
+          </div>
+        {% endif %}
+      </div>
+    </a>
+    <div>
+      <div class="fw-semibold">{{ item.user.username }}</div>
+      {% if item.profile and item.profile.school %}
+      <small class="text-muted">{{ item.profile.school }}</small>
+      {% endif %}
+    </div>
+  </div>
+  <div class="ms-2 mb-3 p-3 bg-white rounded shadow-sm border-start border-4 border-success">
+    <div class="fw-medium">
+      <i class="ri ri-code-line text-success me-1"></i>{{ item.instance.name }}
+      {% if item.instance.is_active %}
+      <span class="badge bg-success ms-2">启用</span>
+      {% else %}
+      <span class="badge bg-secondary ms-2">停用</span>
+      {% endif %}
+    </div>
+    <div class="mt-1">
+      <small class="text-muted">API Key：</small>
+      <code style="font-size:0.8rem;user-select:all;cursor:pointer;" onclick="navigator.clipboard.writeText(this.textContent).then(function(){var t=this;t.style.color='#28a745';setTimeout(function(){t.style.color=''},1000)}.bind(this))">{{ item.instance.api_key }}</code>
+    </div>
+    {% if item.instance.created_at %}
+    <small class="text-muted d-block mt-1">创建时间：{{ item.instance.created_at|date:'Y-m-d H:i' }}</small>
+    {% endif %}
+    <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
+      <a href="/api_instance/{{ item.instance.id }}/" class="btn btn-sm btn-outline-success">详细</a>
+      <a href="" onclick="event.preventDefault();navigator.clipboard.writeText('{{ request.scheme }}://{{ request.get_host }}/api/question_bank/?api_key={{ item.instance.api_key }}').then(function(){alert('API_URL 已复制到剪贴板')})" class="btn btn-sm btn-outline-primary">
+        <i class="ri ri-link"></i> 复制 API URL
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,149 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+{% load app1_extras %}
+{% block title %}错题查看{% endblock %}
+{% block page_js %}
+{{ block.super }}
+<script src="{% url 'serve_katex_file' filename='js/pages-account-settings-account.js' %}"></script>
+<script>
+// 题库数据（按学科分组），由后端渲染
+var uploadsBySubject = {};
+{% for u in uploads %}
+var subj = '{{ u.subject|escapejs }}';
+if (!uploadsBySubject[subj]) uploadsBySubject[subj] = [];
+uploadsBySubject[subj].push({id: '{{ u.encrypted_id }}', name: '{{ u.name|escapejs }}', count: {{ u.wrong_count }}});
+{% endfor %}
+
+function updateUploadDropdown(subject) {
+  var sel = document.getElementById('filterUpload');
+  sel.innerHTML = '<option value="">全部题库</option>';
+  if (subject && uploadsBySubject[subject]) {
+    uploadsBySubject[subject].forEach(function(u) {
+      var opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.name + '（' + u.count + '题）';
+      sel.appendChild(opt);
+    });
+    sel.disabled = false;
+  } else {
+    sel.disabled = true;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-wrong-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('确定从错题中移除该题吗？')) return;
+            var qid = this.dataset.questionId;
+            var csrf = '{{ csrf_token }}';
+            fetch('/delete_wrong_question/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+                body: JSON.stringify({question_id: parseInt(qid)})
+            }).then(function(r){return r.json()}).then(function(d){
+                if (d.success) { location.reload(); }
+                else { alert(d.message); }
+            });
+        });
+    });
+
+    var subjectSel = document.getElementById('filterSubject');
+    var uploadSel = document.getElementById('filterUpload');
+    var currentSubject = '{{ current_subject }}';
+    var currentUpload = '{{ current_upload_id }}';
+
+    // 初始化上传下拉
+    updateUploadDropdown(currentSubject);
+    if (currentUpload) {
+      // 选中当前题库
+      for (var i = 0; i < uploadSel.options.length; i++) {
+        if (uploadSel.options[i].value === currentUpload) {
+          uploadSel.selectedIndex = i;
+          break;
+        }
+      }
+    }
+
+    // 学科变更 → 重置题库并跳转
+    subjectSel.addEventListener('change', function() {
+      var val = this.value;
+      if (val) { window.location.href = '/wrong_questions/?subject=' + encodeURIComponent(val); }
+      else { window.location.href = '/wrong_questions/'; }
+    });
+
+    // 题库变更 → 跳转（携带学科+题库）
+    uploadSel.addEventListener('change', function() {
+      var subj = subjectSel.value;
+      var upl = this.value;
+      var params = [];
+      if (subj) params.push('subject=' + encodeURIComponent(subj));
+      if (upl) params.push('upload_id=' + encodeURIComponent(upl));
+      var qs = params.length ? '?' + params.join('&') : '';
+      window.location.href = '/wrong_questions/' + qs;
+    });
+
+    // 渲染KaTeX
+    if (window.renderMathInElement) {
+        renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false});
+    }
+});
+</script>
+{% endblock %}
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+    <h4 class="fw-bold mb-4">错题查看</h4>
+    <!-- 筛选工具栏 -->
+    <div class="card mb-4">
+        <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+            <label class="form-label mb-0 fw-bold">学科：</label>
+            <select class="form-select" id="filterSubject" style="max-width:250px;">
+                <option value="">全部学科（共 {{ questions|length }} 道错题）</option>
+                {% for s in subjects %}
+                <option value="{{ s.name }}" {% if s.name == current_subject %}selected{% endif %}>{{ s.name }}（{{ s.count }}题）</option>
+                {% endfor %}
+            </select>
+            <label class="form-label mb-0 fw-bold ms-2">题库：</label>
+            <select class="form-select" id="filterUpload" style="max-width:400px;" {% if not current_subject %}disabled{% endif %}>
+                <option value="">全部题库</option>
+            </select>
+        </div>
+    </div>
+    {% if questions %}
+    {% for q in questions %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <h6 class="card-subtitle mb-2 text-muted">{{ q.question_type }}</h6>
+                <div>
+                    {% if q.upload_id_encrypted %}
+                    <a href="{% url 'open_question_bank' upload_id=q.upload_id_encrypted %}#q-{{ q.id }}" class="origin-link me-2">查看原题库 →</a>
+                    {% endif %}
+                    <a href="{% url 'question_ai_chat' q.id %}" class="btn btn-sm btn-outline-info me-2"><i class="ri ri-ai-generate"></i> AI解析</a>
+                    <button class="btn btn-sm btn-outline-danger delete-wrong-btn" data-question-id="{{ q.id }}">移除</button>
+                </div>
+            </div>
+            <div class="math-content math-lazy" style="white-space:pre-wrap;line-height:1.8;">{{ q.content|render_content|safe }}</div>
+            {% if q.answer %}
+            <div class="mt-2 p-2 bg-light rounded">
+                <strong>答案：</strong><span class="math-content math-lazy" style="white-space:pre-wrap;">{{ q.answer|render_content|safe }}</span>
+            </div>
+            {% endif %}
+            {% if q.tags %}
+            <div class="mt-2">
+                {% for t in q.tags|split_tags %}
+                <span class="badge bg-secondary me-1">{{ t }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card"><div class="card-body text-center py-5"><p class="text-muted">暂无错题记录</p></div></div>
+    {% endif %}
+</div>
+<style>
+.origin-link { color: #0d6efd; text-decoration: none; font-size: 0.85rem; }
+.origin-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}

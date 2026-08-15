@@ -1,0 +1,105 @@
+{% extends 'layout/layout_vertical.html' %}
+{% load static %}
+
+{% block title %}模型配置{% endblock %}
+
+{% block content %}
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4">
+    <span class="text-muted fw-light">个人中心 / </span> 模型配置
+  </h4>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">AI 模型配置</h5>
+      <a href="/model_config/add/" class="btn btn-primary">
+        <i class="ri ri-add-line"></i> 添加模型
+      </a>
+    </div>
+    <div class="card-body">
+      <div id="model-config-list">
+        <div class="text-center py-5">
+          <div class="spinner-border text-info" role="status"></div>
+          <p class="text-muted mt-2">加载中...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block page_js %}
+{{ block.super }}
+<script>
+var csrftoken = (function() {
+  var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : '';
+})();
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadConfigs();
+});
+
+function loadConfigs() {
+  var list = document.getElementById('model-config-list');
+  fetch('/get_model_configs/')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.success) { list.innerHTML = '<p class="text-danger">加载失败</p>'; return; }
+      if (data.configs.length === 0) {
+        list.innerHTML = '<div class="text-center py-4"><p class="text-muted">暂无模型配置</p></div>';
+        return;
+      }
+      var html = '';
+      data.configs.forEach(function(c) {
+        var bc = c.is_enabled ? 'border-success' : '';
+        var badge = c.is_enabled ? '<span class="badge bg-success ms-2">已启用</span>' : '';
+        var eb = c.is_enabled 
+          ? '<button class="btn btn-sm btn-outline-warning" onclick="toggleConfig(\'' + c.id + '\')">禁用</button>'
+          : '<button class="btn btn-sm btn-outline-success" onclick="toggleConfig(\'' + c.id + '\')">启用</button>';
+
+        html += '<div class="card mb-3 ' + bc + '">';
+        html += '<div class="card-body">';
+        html += '<h6 class="card-title">' + c.model_id + badge + '</h6>';
+        html += '<p class="mb-1"><strong>API 格式：</strong>' + (c.api_format === 'openai' ? 'OpenAI Chat Completions' : 'Anthropic Messages') + '</p>';
+        html += '<p class="mb-1"><strong>Base URL：</strong><small class="text-muted">' + c.request_url + '</small></p>';
+        html += '<p class="mb-3"><strong>API 密钥：</strong><small class="text-muted">' + c.api_key_mask + '</small></p>';
+        html += '<div class="d-flex gap-2">';
+        html += eb;
+        html += '<button class="btn btn-sm btn-outline-danger" onclick="deleteConfig(\'' + c.id + '\')">删除</button>';
+        html += '</div>';
+        html += '</div></div>';
+      });
+      list.innerHTML = html;
+    })
+    .catch(function() {
+      list.innerHTML = '<p class="text-danger">加载失败，请稍后重试</p>';
+    });
+}
+
+function toggleConfig(id) {
+  var fd = new FormData();
+  fd.append('id', id);
+  fd.append('csrfmiddlewaretoken', csrftoken);
+  fetch('/toggle_model_config/', { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) loadConfigs();
+      else alert('操作失败：' + data.message);
+    });
+}
+
+function deleteConfig(id) {
+  if (!confirm('确定要删除这个模型配置吗？')) return;
+  var fd = new FormData();
+  fd.append('id', id);
+  fd.append('csrfmiddlewaretoken', csrftoken);
+  fetch('/delete_model_config/', { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) loadConfigs();
+      else alert('删除失败：' + data.message);
+    });
+}
+</script>
+{% endblock page_js %}
